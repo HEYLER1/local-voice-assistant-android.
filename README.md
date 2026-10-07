@@ -79,6 +79,68 @@ Las etiquetas de voz son manuales. No incluye huellas de voz, diarización autom
 4. Descarga y copia `qwen3_0_6b_mixed_int4.litertlm` al teléfono, y usa **Importar LLM**. Fuente pública fijada: https://huggingface.co/litert-community/Qwen3-0.6B/tree/a3c5d805ae362dff7f580bc25f2dfb9a5a7eaa76 . No requiere un servidor; la primera descarga sí necesita red.
 5. Activa modo avión. Los ensayos con archivos y las respuestas deben seguir funcionando. El permiso del micrófono se pide solo al pulsar **Escuchar micrófono**.
 
+## Resultados estadísticos y cómo interpretarlos
+
+Hay dos ensayos distintos: el informe de laboratorio del Galaxy A54 aportado por el usuario y una prueba de números en emulador. **No son una medición de precisión general ni una garantía de rendimiento de la interfaz 0.12.** El laboratorio procesa clips sintéticos; no reproduce una clase larga, música real ni el tiempo completo desde que una persona habla hasta que aparece una respuesta.
+
+### Galaxy A54: voz sola frente a motores integrados
+
+Fuente: informe de laboratorio aportado por el usuario, resumido sin identificadores personales en [a54-lab-summary.json](docs/a54-lab-summary.json). Cada fase reconoce los mismos cinco clips en tres vueltas: 15 transcripciones por fase. La fase integrada incluye además 15 respuestas del modelo local. El informe no incluye una fase de LLM solo, por lo que no permite comparar su rapidez aislada contra la integrada.
+
+| Medida | Voz sola · 15 casos | Integrados · 15 casos | Interpretación |
+|---|---:|---:|---|
+| Transcripción: media | 0,782 s | 0,851 s | Tiempo de inferencia del clip; integrar añade un 8,8 % a esta media. |
+| Transcripción: mediana (P50) | 0,780 s | 0,843 s | La mitad de los casos terminó en este tiempo o menos. |
+| Transcripción: P95 | 0,981 s | 1,036 s | Con 15 casos, rango más cercano selecciona el máximo; no predice el peor caso futuro. |
+| RTF medio | 0,191 | 0,209 | Tiempo de procesamiento / duración del audio. Menor que 1 significa procesar estos clips más rápido que su duración. |
+| WER agregado normalizado | 1,64 % | 1,64 % | 3 errores / 183 palabras por fase. No es una evaluación con ruido real. |
+| Máximo PSS observado | 461,6 MB | 2.428,3 MB | Memoria proporcional del proceso muestreada; no es memoria exclusiva del modelo ni pico exacto. |
+| Temperatura de batería observada | 28,9 °C | 29,1–29,4 °C | Sensor de batería; no mide la temperatura de CPU. |
+
+El RTF de 0,209 equivale a unos 0,209 segundos de procesamiento por segundo de audio en este ensayo. No significa que el micrófono responda en 209 ms: captura, estabilización de texto y colas añaden tiempo.
+
+### Respuestas locales en la fase integrada
+
+| Medida · 15 respuestas | Resultado | Qué significa |
+|---|---:|---|
+| Primer texto: media | 2,476 s | Tiempo hasta la primera salida, con preparación de conversación; excluye carga del motor según el informe. |
+| Primer texto: mediana | 2,357 s | Tiempo típico de esta muestra, no desde el inicio del habla. |
+| Primer texto: P95 | 4,556 s | Máximo observado con este tamaño de muestra. |
+| Respuesta completa: media | 5,499 s | Tiempo hasta finalizar la generación de laboratorio. |
+| Respuesta completa: mediana | 5,261 s | Tiempo central de la muestra. |
+| Respuesta completa: P95 | 7,700 s | Máximo observado; respuestas más largas pueden tardar más. |
+| Última carga efectiva de ASR | 0,489 s | Una carga registrada, no media de arranque de la aplicación. |
+| Última carga efectiva de LLM | 2,715 s | Una carga registrada; no se suma automáticamente a todas las respuestas. |
+
+Los límites del laboratorio son de 160 tokens por respuesta; la conversación utiliza otro límite. No se midió aquí la corrección factual de las respuestas. Las muestras se tomaron sin cargar el teléfono y con estado térmico Android 0. La batería se observó en 25 % para voz sola y 24–23 % para integrado: esas lecturas gruesas no permiten calcular consumo comparable, autonomía ni mWh. Este informe tampoco certifica una sesión sostenida de 20 minutos.
+
+### Números: prueba sintética en emulador ARM64
+
+Fuente reproducible: [numeric-recognition-synthetic.json](docs/numeric-recognition-synthetic.json). Se procesaron tres frases Piper, una vez limpias y otra con tres tonos estacionarios a 10 dB SNR.
+
+| Frase de prueba | Menciones esperadas | Coincidencias sin tonos | Coincidencias con tonos | Inferencia sin tonos | Inferencia con tonos |
+|---|---|---:|---:|---:|---:|
+| Precio | 750 | 1/1 | 1/1 | 225 ms | 204 ms |
+| Año | 1995 | 1/1 | 1/1 | 266 ms | 270 ms |
+| Medida y descuento | 3,5 y 12 % | 2/2 | 2/2 | 335 ms | 339 ms |
+| **Total / media de tiempo** | **4 por condición** | **4/4** | **4/4** | **275,3 ms** | **271,0 ms** |
+
+Se acepta la forma verbal equivalente: «tres coma cinco» cuenta como 3,5; no se exige que la transcripción produzca dígitos. Las ocho menciones se reconocieron en estos seis clips, pero una muestra tan pequeña no demuestra 100 % de precisión general. La diferencia de tiempo entre condiciones es descriptiva y no demuestra que añadir ruido acelere el motor. Los tonos no equivalen a música, reverberación ni voces superpuestas, y el emulador no valida el micrófono del A54.
+
+### Glosario de métricas
+
+| Término | Cálculo o definición | Mejor resultado |
+|---|---|---|
+| Media | Suma de tiempos / número de casos. Sensible a casos lentos. | Menor tiempo, con la misma tarea. |
+| P50 / mediana | Percentil por rango más cercano: posición `ceil(0,50 × n)` en datos ordenados. | Menor, con muestra comparable. |
+| P95 | Posición `ceil(0,95 × n)`; muestra la parte lenta de la muestra. | Menor; requiere más casos para estimar estabilidad. |
+| WER | `(sustituciones + omisiones + inserciones) / palabras de referencia × 100`. Agregado por palabras, no media de porcentajes. | Menor; 0 % significa ninguna diferencia bajo esta normalización. |
+| Normalización WER | Minúsculas, sin acentos ni puntuación; palabras y números se comparan como tokens. | Especificar siempre; no mide puntuación ni formato. |
+| RTF | Segundos de inferencia / segundos de audio. | Menor que 1 para estos clips. |
+| PSS | Memoria proporcional atribuida al proceso, incluyendo su parte de memoria compartida. | Menor con capacidades equivalentes. |
+| SNR | Relación señal/ruido. En este ensayo: 10 dB con tonos añadidos. | Describe la condición; no es una puntuación de calidad. |
+
+
 ## Protocolo de comparación
 
 Mantén brillo, volumen, aplicaciones abiertas y carga de batería lo más constantes posible. Evita cargar el teléfono durante una medición de consumo; el informe incluye si estaba cargando. Espera a que se enfríe entre escenarios y alterna el orden para reducir sesgos por calentamiento.
@@ -106,7 +168,7 @@ La captura manual usa AudioRecord mono 16 kHz, memoria y los eventos reales del 
 
 Los tests instrumentados ejecutan los motores nativos; sin modelos fallan explícitamente. Las pruebas del asistente también cubren audio sintético → pregunta → respuesta, resumen, revisiones, pausa en segundo plano y CRUD/reapertura/borrado de textos elegidos. El resultado del emulador debe mantenerse separado del A54 real. No publicar cifras de batería/temperatura del emulador como medidas del teléfono.
 
-El 6 de octubre de 2026 se verificaron compilación, dos pruebas unitarias y cinco instrumentadas en un emulador ARM64. Las instrumentadas incluyen pantalla nativa, ausencia de permiso de Internet, transcripción real, respuesta local real y comparación de las tres fases (60 mediciones). Los audios son sintéticos. La prueba sostenida de 20 minutos y las mediciones del A54 físico quedan pendientes.
+El 6 de octubre de 2026 se verificaron compilación, dos pruebas unitarias y cinco instrumentadas en un emulador ARM64. Las instrumentadas incluyen pantalla nativa, ausencia de permiso de Internet, transcripción real, respuesta local real y comparación de las tres fases (60 mediciones). Los audios son sintéticos. La prueba sostenida de 20 minutos queda pendiente. Las mediciones posteriores del laboratorio del A54 se explican en las tablas de resultados; no validan la captura física de las últimas versiones de la interfaz.
 
 `speech_load_ms` y `llm_load_ms` representan la última carga efectiva del motor en esta sesión; reutilizar un motor ya cargado no sustituye ese valor por cero. No son tiempos de arranque completo de la aplicación. La primera respuesta de cada fase puede incluir calentamiento y debe conservarse por separado al analizar el JSON.
 

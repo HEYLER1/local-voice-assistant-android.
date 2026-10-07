@@ -1,0 +1,65 @@
+{
+  "scope": "Earlier Galaxy A54 synthetic-clip laboratory report supplied by the user; not a benchmark of UI 0.12 or sustained classroom capture",
+  "emulator": false,
+  "percentile_method": "nearest rank",
+  "phases": {
+    "asr": {
+      "asr_ms": {
+        "n": 15,
+        "mean": 781.633789,
+        "p50": 780.001461,
+        "p95": 981.456114
+      },
+      "rtf": {
+        "n": 15,
+        "mean": 0.19110176329442852,
+        "p50": 0.1910411306265404,
+        "p95": 0.233527122479329
+      },
+      "word_errors": 3,
+      "reference_words": 183,
+      "max_sampled_pss_mb": 461.57421875,
+      "battery_temperature_c_range": [
+        28.9,
+        28.9
+      ]
+    },
+    "combined": {
+      "asr_ms": {
+        "n": 15,
+        "mean": 850.7639941333333,
+        "p50": 843.155154,
+        "p95": 1036.255153
+      },
+      "rtf": {
+        "n": 15,
+        "mean": 0.20889071924914038,
+        "p50": 0.21092621408025197,
+        "p95": 0.24679177169542094
+      },
+      "word_errors": 3,
+      "reference_words": 183,
+      "max_sampled_pss_mb": 2428.28515625,
+      "battery_temperature_c_range": [
+        29.1,
+        29.4
+      ],
+      "first_text_ms": {
+        "n": 15,
+        "mean": 2475.5137468666667,
+        "p50": 2357.028652,
+        "p95": 4555.806612
+      },
+      "total_ms": {
+        "n": 15,
+        "mean": 5498.980896,
+        "p50": 5261.08442,
+        "p95": 7699.531225
+      }
+    }
+  },
+  "last_effective_load_ms": {
+    "speech_load_ms": 489.206615,
+    "llm_load_ms": 2715.013267
+  }
+}
