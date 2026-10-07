@@ -1,0 +1,59 @@
+{
+  "scope": "Synthetic Piper speech; additive tones are not music; emulator does not validate the A54 microphone",
+  "rows": [
+    {
+      "fixture": 1,
+      "reference": "El precio es de setecientos cincuenta euros.",
+      "condition": "clean",
+      "recognized": "el precio es de setecientos cincuenta euros\n",
+      "numeric_mentions_matched": 1,
+      "numeric_mentions_expected": 1,
+      "asr_ms": 225
+    },
+    {
+      "fixture": 1,
+      "reference": "El precio es de setecientos cincuenta euros.",
+      "condition": "three-tones-10dB-SNR",
+      "recognized": "el precio es de setecientos cincuenta euros\n",
+      "numeric_mentions_matched": 1,
+      "numeric_mentions_expected": 1,
+      "asr_ms": 204
+    },
+    {
+      "fixture": 2,
+      "reference": "En mil novecientos noventa y cinco ocurrió este evento.",
+      "condition": "clean",
+      "recognized": "en mil novecientos noventa y cinco ocurrió este evento\n",
+      "numeric_mentions_matched": 1,
+      "numeric_mentions_expected": 1,
+      "asr_ms": 266
+    },
+    {
+      "fixture": 2,
+      "reference": "En mil novecientos noventa y cinco ocurrió este evento.",
+      "condition": "three-tones-10dB-SNR",
+      "recognized": "en mil novecientos noventa y cinco ocurrió este evento\n",
+      "numeric_mentions_matched": 1,
+      "numeric_mentions_expected": 1,
+      "asr_ms": 270
+    },
+    {
+      "fixture": 3,
+      "reference": "La medida es tres coma cinco metros y el descuento es doce por ciento.",
+      "condition": "clean",
+      "recognized": "la medida es tres coma cinco metros y el descuento es doce por ciento\n",
+      "numeric_mentions_matched": 2,
+      "numeric_mentions_expected": 2,
+      "asr_ms": 335
+    },
+    {
+      "fixture": 3,
+      "reference": "La medida es tres coma cinco metros y el descuento es doce por ciento.",
+      "condition": "three-tones-10dB-SNR",
+      "recognized": "la medida es tres coma cinco metros y el descuento es doce por ciento\n",
+      "numeric_mentions_matched": 2,
+      "numeric_mentions_expected": 2,
+      "asr_ms": 339
+    }
+  ]
+}
