@@ -2,9 +2,31 @@
 
 ![Logo de V](docs/assets/v-logo.svg)
 
-Asistente de voz nativo en Kotlin y Jetpack Compose, con transcripción y respuestas locales, historial privado y mapas de conversación.
+Asistente de voz nativo en Kotlin y Jetpack Compose con transcripción y respuestas locales, historial privado y mapas de conversación.
 
-![Mapa de conversación con datos sintéticos](docs/screenshots/v-android-map-synthetic.png)
+## Interfaz actual · 0.12
+
+Menú lateral con historial por fecha y búsqueda, chats que puedes continuar por voz, y micrófono compacto en la barra inferior.
+
+![Sidebar con datos sintéticos](docs/screenshots/v-android-sidebar-synthetic.png)
+
+![Chat con datos sintéticos](docs/screenshots/v-android-portrait-synthetic.png)
+
+![Mapa con datos sintéticos](docs/screenshots/v-android-map-synthetic.png)
+
+## Android 0.12: sidebar rediseñado
+
+Menú lateral con filas compactas, iconos vectoriales, búsqueda sin borde, botón destacado para nueva conversación y selección del chat activo. El historial se agrupa en Hoy, Ayer, Últimos 7 días y Anteriores según la fecha de actualización del dispositivo. Lista virtualizada para historiales largos. Textos guardados y Ajustes están en un bloque inferior.
+
+## Android 0.11: menú lateral y barra de voz
+
+El botón ☰ abre un menú lateral con el historial, buscador y «Nueva conversación». Toca un chat para abrirlo y continuar con el micrófono. Textos guardados y Ajustes se encuentran también en el menú. La barra inferior compacta permite escribir y contiene el micrófono; durante la escucha muestra el nivel real de audio y permite pausar. Se retira la navegación inferior y el gran micrófono flotante.
+
+## Android 0.10: chats y mapa interactivo
+
+Toca una tarjeta del historial para abrirla en Mapa. Desde el chat, «‹ Chats» regresa al historial y «＋» inicia otro. Toca el nombre en la barra del chat para nombrar tu materia; el nombre se conserva al continuar otras clases. Pulsa el micrófono en un chat reabierto para añadir la nueva transcripción sin borrar lo anterior.
+
+En Mapa, el título pliega o despliega el esquema. Toca el encabezado de una rama para abrirla con animación. «Temas» agrupa todos los fragmentos por palabras destacadas y permite revisarlos; es una clasificación léxica, no una identificación semántica garantizada. El resumen sigue usando contexto reciente.
 
 ## Android 0.9: conversaciones organizadas
 
@@ -12,7 +34,7 @@ El historial conserva la transcripción, preguntas, respuestas y resumen de cada
 
 # V · Asistente Android independiente
 
-Versión 0.9: app nativa Kotlin + Jetpack Compose para el Samsung Galaxy A54 de 8 GB. Escucha, transcripción progresiva, preguntas relevantes, respuestas locales, resumen reciente y textos seleccionados persistentes. Funciona sin servidor Mac y sin servicios remotos de transcripción. El laboratorio de rendimiento sigue disponible en Ajustes.
+Versión 0.12: app nativa Kotlin + Jetpack Compose para el Samsung Galaxy A54 de 8 GB. Escucha, transcripción progresiva, preguntas relevantes, respuestas locales, resumen reciente y textos seleccionados persistentes. Funciona sin servidor Mac y sin servicios remotos de transcripción. El laboratorio de rendimiento sigue disponible en Ajustes.
 
 ## Interfaz y uso
 
@@ -100,7 +122,7 @@ La revisión visual utiliza renders de la ventana de la propia app mediante inst
 
 Validación del 6 de octubre de 2026: compilación correcta, 12 pruebas unitarias y 14 instrumentadas correctas en emulador ARM64 con motores reales. Tras el ajuste de presentación de fórmulas se repitieron las unitarias y el render visual afectado. APK local: `dist/v-asistente-android-0.3.apk`. Instalar encima de la versión anterior.
 
-## Versión 0.9: preguntas estables y navegación
+## Versión 0.12: preguntas estables y navegación
 
 Las preguntas incompletas terminadas en artículos o conectores se descartan antes de generar. Añadir una segunda pregunta a un fragmento conserva las respuestas de las preguntas que siguen presentes; editar o eliminar una pregunta sí invalida su respuesta. La selección visible permanece en la pregunta elegida, y una lista con desplazamiento permite recorrer las últimas 30. Los enlaces subrayados en la transcripción literal abren su respuesta; el texto reconocido no se sustituye ni se reescribe. La ventana de transcripción mantiene 80 fragmentos; las respuestas conservadas pueden seguir accesibles desde la lista aunque su fragmento ya no esté visible.
 
@@ -110,7 +132,7 @@ APK: `dist/v-asistente-android-0.4.apk`, actualización sobre la instalación an
 
 Validación 0.4, 6 de octubre de 2026 (Lima): 14 pruebas unitarias y 8 instrumentadas afectadas correctas. Incluye dos preguntas seguidas sobre el mismo fragmento con generación real, conservación del ID y del texto de la primera respuesta, rechazo de «que hay un», y renders nativos en ambas orientaciones. La supresión acústica física no se certifica con el emulador.
 
-## Versión 0.9: preparación y memoria de conversación
+## Versión 0.12: preparación y memoria de conversación
 
 El modelo de voz se prepara al abrir la app, sin activar el micrófono. Al pulsar el botón, la pantalla distingue preparación de grabación: `listening` solo se activa después de iniciar AudioRecord. Si la voz ya está cargada, iniciar captura evita esperar al bloqueo de generación del LLM. La preparación de respuestas se lanza después de iniciar captura; los dos motores siguen compitiendo por CPU, por lo que no se promete latencia constante en el A54 ni se evita la carga inicial en frío.
 
@@ -124,7 +146,7 @@ El reinicio de captura espera la finalización de la captura anterior. Esto evit
 
 Validación 0.5 (6 de octubre de 2026, Lima): compilación correcta, 14 pruebas unitarias y 10 instrumentadas afectadas correctas. Incluye recuperación y borrado de historial tras reabrir la base, conservación de respuestas interrumpidas, siete regresiones de preguntas y un render de interfaz en ambas orientaciones. Los renders utilizan una conversación temporal aislada; no guardan datos de prueba sobre el historial del usuario.
 
-## Versión 0.9: audio directo de video y revisión de cifras
+## Versión 0.12: audio directo de video y revisión de cifras
 
 Para videos reproducidos en el mismo teléfono: Ajustes → Fuente de audio → Audio del video. Al iniciar, Android solicita consentimiento MediaProjection y permiso RECORD_AUDIO. El servicio usa el tipo mediaProjection, notificación de detención y AudioPlaybackCaptureConfiguration para medios/juegos; excluye la propia app. No crea VirtualDisplay, no captura imágenes y no usa micrófono en esta ruta. Cambiar fuente, pausar, ocultar la app o revocar el token detiene la captura. Mantener el asistente visible en pantalla dividida permite reproducir el video en otra app. Tras 12 segundos continuos sin señal digital, se informa de reproducción pausada/captura bloqueada; no hay fallback silencioso al micrófono.
 
@@ -140,7 +162,7 @@ Referencia de la plataforma: https://developer.android.com/media/platform/av-cap
 
 Validación 0.6, 7 de octubre de 2026 (Lima): compilación correcta, 16 pruebas unitarias y 12 instrumentadas correctas. Estas últimas cubren seis inferencias numéricas en un ensayo, fallo por consentimiento ausente, dos pruebas de historial, siete regresiones del asistente y un render de ambas orientaciones. La captura positiva del video concreto en el A54 sigue pendiente.
 
-## Versión 0.9: interfaz organizada
+## Versión 0.12: interfaz organizada
 
 La conversación se divide en Texto, Preguntas y Resumen. Texto mantiene una vista previa de la respuesta progresiva en vertical y paneles al costado en horizontal. Los enlaces de preguntas abren su sección; el selector conserva la pregunta elegida. El botón de resumen y las consultas escritas llevan a la sección correspondiente. La selección de sección se conserva al rotar.
 
@@ -150,7 +172,7 @@ APK: `dist/v-asistente-android-0.7.apk`, actualización sobre la app anterior. L
 
 Validación 0.7, 7 de octubre de 2026 (Lima): compilación correcta y revisión de renders nativos de texto, preguntas, biblioteca, ajustes y orientación horizontal. Se ejecutó la prueba visual con motores locales y se revisaron las imágenes, ajustando espacio de cabecera y controles. La revisión utiliza contenido sintético y no muestra el historial del usuario.
 
-## Versión 0.9: marca y mapa de conocimiento
+## Versión 0.12: marca y mapa de conocimiento
 
 Logo vectorial propio: una V conectada por nodos y barras de voz, en violeta y verde. Se usa en la cabecera y como icono adaptativo del launcher, con capa monocroma. Fuente SVG: `docs/assets/v-logo.svg`; recursos Android en `app/src/main/res/drawable/brand_*`.
 

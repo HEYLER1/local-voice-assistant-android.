@@ -20,12 +20,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
+import kotlinx.coroutines.launch
 import java.util.Locale
 
 class MainActivity:ComponentActivity(){
@@ -67,7 +70,7 @@ class MainActivity:ComponentActivity(){
 
 private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val text:String="",val scope:String="",val due:String="",val source:String="Texto escrito por usuario")
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable internal fun AssistantScreen(vm:AssistantViewModel,listen:()->Unit,importSpeech:()->Unit,importLanguage:()->Unit,diagnostics:()->Unit,speak:(String)->Unit,stopVoice:()->Unit,initialTab:Int=0,initialSection:Int=0){
+@Composable internal fun AssistantScreen(vm:AssistantViewModel,listen:()->Unit,importSpeech:()->Unit,importLanguage:()->Unit,diagnostics:()->Unit,speak:(String)->Unit,stopVoice:()->Unit,initialTab:Int=0,initialSection:Int=0,initialDrawer:Boolean=false){
     val s by vm.state.collectAsState()
     var liveSection by rememberSaveable{mutableIntStateOf(initialSection)}
     var tab by remember{mutableIntStateOf(initialTab)}
@@ -79,16 +82,22 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
     val compact=LocalConfiguration.current.screenHeightDp<480
     val keyboard=LocalSoftwareKeyboardController.current
     val keyboardOpen=WindowInsets.ime.getBottom(LocalDensity.current)>0
+    val drawer=rememberDrawerState(if(initialDrawer)DrawerValue.Open else DrawerValue.Closed)
+    val scope=rememberCoroutineScope()
+    var naming by remember{mutableStateOf(false)}
+    var nameDraft by remember{mutableStateOf("")}
     var writing by remember{mutableStateOf(false)}
     LaunchedEffect(s.organizationRevision){if(s.organizationRevision>0)liveSection=2}
+    if(naming)AlertDialog(onDismissRequest={naming=false},title={Text("Nombre del chat")},text={OutlinedTextField(nameDraft,{nameDraft=it},label={Text("Ej. Física · clase de eclipses")},singleLine=true)},confirmButton={TextButton(onClick={vm.renameConversation(nameDraft);naming=false}){Text("Guardar")}},dismissButton={TextButton(onClick={naming=false}){Text("Cancelar")}})
+    ModalNavigationDrawer(drawerState=drawer,drawerContent={
+        ChatSidebar(s,tab,{scope.launch{drawer.close()}},{vm.newConversation();tab=0;liveSection=0;scope.launch{drawer.close()}},{id->vm.openConversation(id);tab=0;liveSection=2;scope.launch{drawer.close()}},{librarySection=1;tab=1;scope.launch{drawer.close()}},{tab=2;scope.launch{drawer.close()}})
+    }){
     Scaffold(containerColor=VoiceBackground,
-        topBar={if(!keyboardOpen)Row(Modifier.statusBarsPadding().padding(horizontal=20.dp),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){Box(Modifier.weight(1f)){VoiceHeader(s.listening,compact,s.starting)};if(compact)Box(Modifier.width(240.dp)){VoiceNavigation(tab,true,true){tab=it}}}},
-        bottomBar={if(!keyboardOpen&&!compact)VoiceNavigation(tab,compact){tab=it}},
-        floatingActionButton={if(!keyboardOpen&&tab==0)FloatingVoiceTools(s.listening,s.audioLevel,!s.preparing,{if(s.listening||s.starting){if(s.listening)liveSection=2;vm.pause()}else listen()},{writing=true},{liveSection=2;vm.requestSummary()},tab==0,compact=compact,starting=s.starting)},
-        floatingActionButtonPosition=FabPosition.Center
+        topBar={if(!keyboardOpen)Row(Modifier.statusBarsPadding().padding(horizontal=12.dp),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){IconButton(onClick={scope.launch{drawer.open()}},modifier=Modifier.semantics{contentDescription="Abrir historial de chats"}){Text("☰",style=MaterialTheme.typography.titleLarge)};Box(Modifier.weight(1f)){VoiceHeader(s.listening,true,s.starting)}}},
+        bottomBar={if(tab==0&&!keyboardOpen)ChatVoiceComposer(s.listening,s.starting,s.audioLevel,!s.preparing,{if(s.listening||s.starting){if(s.listening)liveSection=2;vm.pause()}else {liveSection=0;listen()}},{writing=true})}
     ){padding->
         when(tab){
-            0->LiveConversation(s,{editing=it},{text,source->draft=SaveDraft(text=text,source=source)},speak,vm::requestSummary,{vm.clearSession();stopVoice()},{vm.stopResponse();stopVoice()},{tab=2},Modifier.padding(padding).padding(bottom=if(keyboardOpen)0.dp else if(compact)80.dp else 110.dp).imePadding(),liveSection,{liveSection=it})
+            0->Column(Modifier.fillMaxSize().padding(padding)){Row(Modifier.fillMaxWidth().padding(horizontal=20.dp),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){TextButton(onClick={nameDraft=s.conversationTitle.ifBlank{KnowledgeOrganizer.build(s.lines).topic};naming=true},modifier=Modifier.weight(1f)){Text(s.conversationTitle.ifBlank{if(s.lines.isEmpty())"Nueva conversación"else KnowledgeOrganizer.build(s.lines).topic},maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)};TextButton(onClick={vm.newConversation();liveSection=0}){Text("＋")}};key(s.conversationKey){LiveConversation(s,{editing=it},{text,source->draft=SaveDraft(text=text,source=source)},speak,vm::requestSummary,{vm.clearSession();stopVoice()},{vm.stopResponse();stopVoice()},{tab=2},Modifier.weight(1f).imePadding(),liveSection,{liveSection=it})}}
             else->Column(Modifier.fillMaxSize().padding(padding).imePadding().verticalScroll(rememberScrollState()).padding(horizontal=20.dp).padding(top=16.dp,bottom=28.dp),verticalArrangement=Arrangement.spacedBy(14.dp)){
                 when(tab){
                     1->{
@@ -97,7 +106,8 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
                         Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){FilterChip(selected=librarySection==0,onClick={librarySection=0},label={Text("Conversaciones ${s.history.size}")});FilterChip(selected=librarySection==1,onClick={librarySection=1},label={Text("Mis textos ${s.saved.size}")})}
                         if(librarySection==0){
                         Button(onClick={vm.newConversation();liveSection=0;tab=0}){Text("Nueva conversación")}
-                        s.history.forEach{entry->Card(Modifier.fillMaxWidth(),colors=CardDefaults.cardColors(containerColor=androidx.compose.ui.graphics.Color(0xFF171D2A)),shape=androidx.compose.foundation.shape.RoundedCornerShape(24.dp)){Column(Modifier.padding(12.dp)){Text(entry.title,style=MaterialTheme.typography.titleMedium);Text("${entry.fragments} fragmentos · ${entry.questions} preguntas · Mapa",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant);Text(java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM,java.text.DateFormat.SHORT).format(java.util.Date(entry.updated)),style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant);Row{TextButton(onClick={vm.openConversation(entry.id);liveSection=2;tab=0}){Text("Abrir")};TextButton(onClick={vm.deleteConversation(entry.id)}){Text("Borrar")}}}}}
+                        OutlinedTextField(search,{search=it},label={Text("Buscar una clase o conversación")},modifier=Modifier.fillMaxWidth(),singleLine=true)
+                        s.history.filter{search.isBlank()||it.title.contains(search,true)}.forEach{entry->Card(onClick={vm.openConversation(entry.id);liveSection=2;tab=0},modifier=Modifier.fillMaxWidth(),colors=CardDefaults.cardColors(containerColor=androidx.compose.ui.graphics.Color(0xFF171D2A)),shape=androidx.compose.foundation.shape.RoundedCornerShape(24.dp)){Column(Modifier.padding(12.dp)){Text(entry.title,style=MaterialTheme.typography.titleMedium);Text("${entry.fragments} fragmentos · ${entry.questions} preguntas · Mapa",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant);Text(java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM,java.text.DateFormat.SHORT).format(java.util.Date(entry.updated)),style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant);Row{TextButton(onClick={vm.openConversation(entry.id);liveSection=2;tab=0}){Text("Abrir")};TextButton(onClick={vm.deleteConversation(entry.id)}){Text("Borrar")}}}}}
                         if(s.history.isEmpty())DesignPanel("Tu próxima conversación"){Text("Cuando empieces a escuchar, encontrarás aquí el historial.",color=MaterialTheme.colorScheme.onSurfaceVariant)}
                         }else{
                         Text("Textos que elegiste guardar",style=MaterialTheme.typography.titleLarge)
@@ -146,9 +156,10 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
                         }
                     }
                 }
-                if(tab==2)Text("V · Android 0.9",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                if(tab==2)Text("V · Android 0.12",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+    }
     }
     if(writing)ModalBottomSheet(onDismissRequest={writing=false}){
         Column(Modifier.fillMaxWidth().imePadding().padding(horizontal=24.dp).padding(bottom=24.dp),verticalArrangement=Arrangement.spacedBy(14.dp)){

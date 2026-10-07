@@ -79,6 +79,9 @@ private val VoiceColors=darkColorScheme(
     Canvas(modifier){
         val w=size.width;val h=size.height;val stroke=Stroke(width=2.dp.toPx(),cap=StrokeCap.Round)
         when(kind){
+            "close"->{drawLine(color,Offset(w*.25f,h*.25f),Offset(w*.75f,h*.75f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round);drawLine(color,Offset(w*.75f,h*.25f),Offset(w*.25f,h*.75f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round)}
+            "add"->{drawLine(color,Offset(w*.2f,h*.5f),Offset(w*.8f,h*.5f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round);drawLine(color,Offset(w*.5f,h*.2f),Offset(w*.5f,h*.8f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round)}
+            "search"->{drawCircle(color,w*.27f,Offset(w*.42f,h*.42f),style=stroke);drawLine(color,Offset(w*.63f,h*.63f),Offset(w*.85f,h*.85f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round)}
             "chat"->{drawRoundRect(color,Offset(w*.12f,h*.15f),Size(w*.76f,h*.58f),androidx.compose.ui.geometry.CornerRadius(w*.14f),style=stroke);drawLine(color,Offset(w*.25f,h*.73f),Offset(w*.25f,h*.9f),strokeWidth=2.dp.toPx());drawLine(color,Offset(w*.25f,h*.9f),Offset(w*.45f,h*.73f),strokeWidth=2.dp.toPx())}
             "save"->{val path=androidx.compose.ui.graphics.Path().apply{moveTo(w*.25f,h*.13f);lineTo(w*.75f,h*.13f);lineTo(w*.75f,h*.88f);lineTo(w*.5f,h*.7f);lineTo(w*.25f,h*.88f);close()};drawPath(path,color,style=stroke)}
             "settings"->{drawCircle(color,w*.18f,Offset(w/2,h/2),style=stroke);for(i in 0 until 8){val angle=i*Math.PI/4;val x=kotlin.math.cos(angle).toFloat();val y=kotlin.math.sin(angle).toFloat();drawLine(color,Offset(w/2+x*w*.31f,h/2+y*h*.31f),Offset(w/2+x*w*.42f,h/2+y*h*.42f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round)}}
@@ -111,3 +114,20 @@ private val VoiceColors=darkColorScheme(
     }
 }
 @Composable private fun FloatingTool(label:String,icon:String,onClick:()->Unit){Column(horizontalAlignment=Alignment.CenterHorizontally){Surface(onClick=onClick,color=Color(0xFF273043),shape=RoundedCornerShape(17.dp),shadowElevation=8.dp,modifier=Modifier.size(46.dp)){Box(contentAlignment=Alignment.Center){VoiceGlyph(icon,Color(0xFFCFD5E3),Modifier.size(21.dp))}};Text(label,style=MaterialTheme.typography.labelSmall,color=Color(0xFFABB5C7),modifier=Modifier.padding(top=6.dp))}}
+
+@Composable fun ChatVoiceComposer(listening:Boolean,starting:Boolean,level:Float,enabled:Boolean,onVoice:()->Unit,onWrite:()->Unit){
+    Column(Modifier.fillMaxWidth().background(VoiceBackground).navigationBarsPadding().padding(horizontal=16.dp,vertical=10.dp)){
+        Surface(color=Color(0xFF222735),shape=RoundedCornerShape(30.dp),modifier=Modifier.fillMaxWidth()){
+            Row(Modifier.padding(horizontal=8.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically){
+                Surface(onClick=onWrite,color=Color.Transparent,modifier=Modifier.weight(1f),shape=RoundedCornerShape(24.dp)){Text("Escribe o habla con V",color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(14.dp))}
+                Surface(onClick=onVoice,enabled=enabled,color=if(listening)VoiceGreen else Color(0xFFF2F1F7),shape=CircleShape,modifier=Modifier.size(48.dp).semantics{contentDescription=if(starting)"Cancelar preparación"else if(listening)"Pausar escucha"else "Iniciar escucha";role=Role.Button}){
+                    Box(contentAlignment=Alignment.Center){VoiceGlyph(if(listening)"pause"else "mic",Color(0xFF171921),Modifier.size(23.dp))}
+                }
+            }
+        }
+        if(listening||starting)Row(Modifier.fillMaxWidth().padding(top=6.dp),horizontalArrangement=Arrangement.Center,verticalAlignment=Alignment.CenterVertically){
+            Text(if(starting)"Preparando…"else "Escuchando · toca para pausar",style=MaterialTheme.typography.labelSmall,color=VoiceGreen)
+            if(listening)Canvas(Modifier.padding(start=8.dp).width(40.dp).height(12.dp)){for(i in 0..4){val h=2.dp.toPx()+level.coerceIn(0f,1f)*(if(i==2)10 else 6).dp.toPx();drawLine(VoiceGreen,Offset(size.width*(i+1)/6,size.height/2-h/2),Offset(size.width*(i+1)/6,size.height/2+h/2),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round)}}
+        }
+    }
+}

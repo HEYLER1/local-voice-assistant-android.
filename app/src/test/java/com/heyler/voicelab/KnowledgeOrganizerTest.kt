@@ -3,5 +3,6 @@ import org.junit.Assert.*
 import org.junit.Test
 class KnowledgeOrganizerTest {
     @Test fun preservesSourceIdsAndLiteralQuantities(){val line=SpeechLine(8,"El eclipse solar duró cinco minutos y se observó en España.",true);val map=KnowledgeOrganizer.build(listOf(line));assertTrue(map.ideas.contains(line));assertEquals(listOf(line),map.figures);assertTrue(map.topic.isNotBlank());assertEquals("El eclipse solar duró cinco minutos y se observó en España.",map.figures.single().text)}
+    @Test fun topicBranchesPreserveEveryOriginalFragment(){val lines=listOf(SpeechLine(1,"Eclipse solar y eclipse lunar.",true),SpeechLine(2,"Gravedad terrestre y gravedad lunar.",true),SpeechLine(3,"Eclipse solar: eclipse visible.",true));val topics=KnowledgeOrganizer.topics(lines);assertEquals(lines.map{it.id}.sorted(),topics.flatMap{it.lines}.map{it.id}.sorted());assertTrue(topics.any{it.lines.size==2});assertTrue(KnowledgeOrganizer.topics(emptyList()).isEmpty())}
     @Test fun emptyTranscriptInventsNoKnowledge(){val map=KnowledgeOrganizer.build(emptyList());assertTrue(map.ideas.isEmpty());assertTrue(map.figures.isEmpty());assertEquals("Tu conversación",map.topic)}
 }

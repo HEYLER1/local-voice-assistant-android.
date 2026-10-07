@@ -57,6 +57,9 @@ class ScreenSnapshotTest {
             page(1,0,"v-android-library-synthetic.png")
             page(2,0,"v-android-settings-synthetic.png")
             page(0,0,"v-android-portrait-synthetic.png")
+            instrumentation.runOnMainSync{(activity as MainActivity).setContent{VoiceTheme{key("drawer"){AssistantScreen(assistant,{}, {}, {}, {}, {}, {},initialDrawer=true)}}}}
+            render(activity,"v-android-sidebar-synthetic.png")
+            page(0,0,"v-android-portrait-synthetic.png")
             instrumentation.runOnMainSync{activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE}
             waitFor{val candidate=current();candidate!=null&&candidate.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE}
             activity=checkNotNull(current());render(activity,"v-android-landscape-synthetic.png")
