@@ -37,6 +37,7 @@ class MainActivity:ComponentActivity(){
     private var localVoiceReady=false
     private var videoRequestPending=false
     private val speechImport=registerForActivityResult(ActivityResultContracts.OpenDocument()){uri->uri?.let{assistant.importModel(it,true)}}
+    private val soniqoImport=registerForActivityResult(ActivityResultContracts.OpenDocument()){uri->uri?.let{assistant.importSoniqo(it)}}
     private val languageImport=registerForActivityResult(ActivityResultContracts.OpenDocument()){uri->uri?.let{assistant.importModel(it,false)}}
     private val permission=registerForActivityResult(ActivityResultContracts.RequestPermission()){allowed->if(allowed)startSelectedAudio()else assistant.state.value=assistant.state.value.copy(status="Permiso de micrófono no concedido.")}
     private val videoConsent=registerForActivityResult(ActivityResultContracts.StartActivityForResult()){result->
@@ -58,7 +59,7 @@ class MainActivity:ComponentActivity(){
             importSpeech={speechImport.launch(arrayOf("application/zip","application/octet-stream"))},importLanguage={languageImport.launch(arrayOf("*/*"))},
             diagnostics={assistant.releaseModels{startActivity(Intent(this,LabActivity::class.java))}},
             speak={text->if(localVoiceReady){assistant.pause();tts?.speak(text,TextToSpeech.QUEUE_FLUSH,null,"local-answer")}else assistant.state.value=assistant.state.value.copy(status="Instala una voz española sin conexión en los ajustes de Android para escuchar respuestas.")},
-            stopVoice={tts?.stop()})
+            stopVoice={tts?.stop()},importSoniqo={soniqoImport.launch(arrayOf("application/zip","application/octet-stream"))})
             val s by assistant.state.collectAsState()
             DisposableEffect(s.listening||s.generating){if(s.listening||s.generating)window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);onDispose{}}
         }}
@@ -70,34 +71,47 @@ class MainActivity:ComponentActivity(){
 
 private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val text:String="",val scope:String="",val due:String="",val source:String="Texto escrito por usuario")
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable internal fun AssistantScreen(vm:AssistantViewModel,listen:()->Unit,importSpeech:()->Unit,importLanguage:()->Unit,diagnostics:()->Unit,speak:(String)->Unit,stopVoice:()->Unit,initialTab:Int=0,initialSection:Int=0,initialDrawer:Boolean=false){
+@Composable internal fun AssistantScreen(vm:AssistantViewModel,listen:()->Unit,importSpeech:()->Unit,importLanguage:()->Unit,diagnostics:()->Unit,speak:(String)->Unit,stopVoice:()->Unit,initialTab:Int=0,initialSection:Int=0,initialDrawer:Boolean=false,importSoniqo:()->Unit={}){
     val s by vm.state.collectAsState()
     var liveSection by rememberSaveable{mutableIntStateOf(initialSection)}
     var tab by remember{mutableIntStateOf(initialTab)}
-    var question by remember{mutableStateOf("")}
+    var question by rememberSaveable(s.conversationKey){mutableStateOf("")}
+    var sentAnswerId by remember(s.conversationKey){mutableStateOf<String?>(null)}
     var editing by remember{mutableStateOf<SpeechLine?>(null)}
     var draft by remember{mutableStateOf<SaveDraft?>(null)}
     var librarySection by remember{mutableIntStateOf(0)}
     var search by remember{mutableStateOf("")}
     val compact=LocalConfiguration.current.screenHeightDp<480
     val keyboard=LocalSoftwareKeyboardController.current
-    val keyboardOpen=WindowInsets.ime.getBottom(LocalDensity.current)>0
     val drawer=rememberDrawerState(if(initialDrawer)DrawerValue.Open else DrawerValue.Closed)
     val scope=rememberCoroutineScope()
     var naming by remember{mutableStateOf(false)}
     var nameDraft by remember{mutableStateOf("")}
-    var writing by remember{mutableStateOf(false)}
     LaunchedEffect(s.organizationRevision){if(s.organizationRevision>0)liveSection=2}
     if(naming)AlertDialog(onDismissRequest={naming=false},title={Text("Nombre del chat")},text={OutlinedTextField(nameDraft,{nameDraft=it},label={Text("Ej. Física · clase de eclipses")},singleLine=true)},confirmButton={TextButton(onClick={vm.renameConversation(nameDraft);naming=false}){Text("Guardar")}},dismissButton={TextButton(onClick={naming=false}){Text("Cancelar")}})
     ModalNavigationDrawer(drawerState=drawer,drawerContent={
         ChatSidebar(s,tab,{scope.launch{drawer.close()}},{vm.newConversation();tab=0;liveSection=0;scope.launch{drawer.close()}},{id->vm.openConversation(id);tab=0;liveSection=2;scope.launch{drawer.close()}},{librarySection=1;tab=1;scope.launch{drawer.close()}},{tab=2;scope.launch{drawer.close()}})
     }){
     Scaffold(containerColor=VoiceBackground,
-        topBar={if(!keyboardOpen)Row(Modifier.statusBarsPadding().padding(horizontal=12.dp),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){IconButton(onClick={scope.launch{drawer.open()}},modifier=Modifier.semantics{contentDescription="Abrir historial de chats"}){Text("☰",style=MaterialTheme.typography.titleLarge)};Box(Modifier.weight(1f)){VoiceHeader(s.listening,true,s.starting)}}},
-        bottomBar={if(tab==0&&!keyboardOpen)ChatVoiceComposer(s.listening,s.starting,s.audioLevel,!s.preparing,{if(s.listening||s.starting){if(s.listening)liveSection=2;vm.pause()}else {liveSection=0;listen()}},{writing=true})}
+        topBar={
+            Column(Modifier.statusBarsPadding()){
+                if(tab==0)ConversationTopBar(liveSection,{liveSection=it},{keyboard?.hide();scope.launch{drawer.open()}},{vm.newConversation();liveSection=0})
+                else Row(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=8.dp),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){
+                    ChatCircleAction("Abrir historial de chats","menu"){scope.launch{drawer.open()}}
+                    Spacer(Modifier.width(12.dp));VoiceHeader(s.listening,true,s.starting)
+                }
+                if(tab==0)Row(Modifier.fillMaxWidth().padding(horizontal=20.dp,vertical=4.dp),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){
+                    TextButton(onClick={nameDraft=s.conversationTitle.ifBlank{KnowledgeOrganizer.build(s.lines).topic};naming=true},modifier=Modifier.weight(1f),contentPadding=PaddingValues(horizontal=8.dp,vertical=0.dp)){
+                        Text(s.conversationTitle.ifBlank{if(s.lines.isEmpty())"Nueva conversación"else KnowledgeOrganizer.build(s.lines).topic},maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis,color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.labelLarge)
+                        Spacer(Modifier.width(6.dp));VoiceGlyph("chevron",MaterialTheme.colorScheme.onSurfaceVariant,Modifier.size(12.dp))
+                    }
+                }
+            }
+        },
+        bottomBar={if(tab==0)ChatVoiceComposer(s.listening,s.starting,s.audioLevel,!s.preparing,{if(s.listening||s.starting){if(s.listening)liveSection=2;vm.pause()}else {liveSection=0;listen()}},question,{question=it},{if(question.isNotBlank()&&!s.preparing){vm.ask(question.trim());sentAnswerId=vm.state.value.answers.lastOrNull()?.id;question="";liveSection=0;keyboard?.hide()}})}
     ){padding->
         when(tab){
-            0->Column(Modifier.fillMaxSize().padding(padding)){Row(Modifier.fillMaxWidth().padding(horizontal=20.dp),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){TextButton(onClick={nameDraft=s.conversationTitle.ifBlank{KnowledgeOrganizer.build(s.lines).topic};naming=true},modifier=Modifier.weight(1f)){Text(s.conversationTitle.ifBlank{if(s.lines.isEmpty())"Nueva conversación"else KnowledgeOrganizer.build(s.lines).topic},maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis)};TextButton(onClick={vm.newConversation();liveSection=0}){Text("＋")}};key(s.conversationKey){LiveConversation(s,{editing=it},{text,source->draft=SaveDraft(text=text,source=source)},speak,vm::requestSummary,{vm.clearSession();stopVoice()},{vm.stopResponse();stopVoice()},{tab=2},Modifier.weight(1f).imePadding(),liveSection,{liveSection=it})}}
+            0->Column(Modifier.fillMaxSize().padding(padding)){key(s.conversationKey){LiveConversation(s,{editing=it},{text,source->draft=SaveDraft(text=text,source=source)},speak,vm::requestSummary,{vm.clearSession();stopVoice()},{vm.stopResponse();stopVoice()},{tab=2},Modifier.weight(1f),liveSection,{liveSection=it},preferredAnswerId=sentAnswerId)}}
             else->Column(Modifier.fillMaxSize().padding(padding).imePadding().verticalScroll(rememberScrollState()).padding(horizontal=20.dp).padding(top=16.dp,bottom=28.dp),verticalArrangement=Arrangement.spacedBy(14.dp)){
                 when(tab){
                     1->{
@@ -138,6 +152,13 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
                         Row{FilterChip(selected=s.audioSource=="mic",onClick={vm.setAudioSource("mic")},label={Text("Micrófono")});Spacer(Modifier.width(8.dp));FilterChip(selected=s.audioSource=="video",onClick={vm.setAudioSource("video")},label={Text("Audio del video")})}
                         Text("Captura el video del mismo teléfono sin usar el micrófono. Mantén ambas apps en pantalla dividida. Android solicitará permiso; algunas apps bloquean la captura.",style=MaterialTheme.typography.bodySmall)
                         }
+                        DesignPanel("Reconocimiento de voz"){
+                        Column{FilterChip(selected=s.speechEngine=="soniqo",onClick={vm.setSpeechEngine("soniqo")},label={Text("Soniqo · Parakeet progresivo")});Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){FilterChip(selected=s.speechEngine=="moonshine",onClick={vm.setSpeechEngine("moonshine")},label={Text("Moonshine")});FilterChip(selected=s.speechEngine=="system",onClick={vm.setSpeechEngine("system")},label={Text("Android local")})}}
+                        OutlinedButton(onClick=importSoniqo,enabled=!s.preparing&&!s.listening&&!s.starting){Text("Importar paquete Soniqo ZIP")}
+                        Text("Android local es experimental: depende del servicio y del idioma instalado en tu teléfono. No es el motor privado de Transcripción instantánea. Solo usa el micrófono. Soniqo y Moonshine admiten audio directo del video.",style=MaterialTheme.typography.bodySmall)
+                        Toggle("Priorizar solo transcripción",s.transcriptionOnly,vm::setTranscriptionOnly)
+                        Text("Pausa respuestas y resúmenes durante la escucha. El resumen puede generarse al detenerla. Actívalo antes de grabar para descargar el modelo de respuestas de memoria.",style=MaterialTheme.typography.bodySmall)
+                        }
                         DesignPanel("Durante la conversación"){
                         Toggle("Responder preguntas del audio",s.autoAnswers,vm::setAnswers)
                         Toggle("Resumen periódico",s.autoSummary,vm::setSummary)
@@ -156,17 +177,10 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
                         }
                     }
                 }
-                if(tab==2)Text("V · Android 0.12",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                if(tab==2)Text("V · Android 0.17",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
-    }
-    if(writing)ModalBottomSheet(onDismissRequest={writing=false}){
-        Column(Modifier.fillMaxWidth().imePadding().padding(horizontal=24.dp).padding(bottom=24.dp),verticalArrangement=Arrangement.spacedBy(14.dp)){
-            Text("Escribe a tu asistente",style=MaterialTheme.typography.titleLarge)
-            OutlinedTextField(question,{question=it},label={Text("Tu pregunta")},modifier=Modifier.fillMaxWidth(),maxLines=4,keyboardOptions=KeyboardOptions(imeAction=ImeAction.Send),keyboardActions=KeyboardActions(onSend={if(question.isNotBlank()){vm.ask(question);liveSection=1;question="";writing=false;keyboard?.hide()}}))
-            Button(onClick={vm.ask(question);liveSection=1;question="";writing=false;keyboard?.hide()},enabled=question.isNotBlank()&&!s.preparing,modifier=Modifier.fillMaxWidth()){Text("Enviar consulta")}
-        }
     }
     editing?.let{line->var text by remember(line.id){mutableStateOf(line.text)};var voice by remember(line.id){mutableStateOf(line.voice)}
         AlertDialog(onDismissRequest={editing=null},title={Text("Editar texto o voz")},text={Column{

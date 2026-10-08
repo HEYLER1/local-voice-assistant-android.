@@ -3,6 +3,17 @@ package com.heyler.voicelab
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -48,6 +59,26 @@ private val VoiceColors=darkColorScheme(
         }
     }
 }
+@Composable fun ChatCircleAction(label:String,icon:String,onClick:()->Unit){
+    Surface(onClick=onClick,color=Color(0xFF222735),shape=CircleShape,modifier=Modifier.size(44.dp).border(1.dp,MaterialTheme.colorScheme.outlineVariant,CircleShape).semantics{contentDescription=label;role=Role.Button}){
+        Box(contentAlignment=Alignment.Center){VoiceGlyph(icon,MaterialTheme.colorScheme.onSurface,Modifier.size(21.dp))}
+    }
+}
+@Composable fun ConversationTopBar(selected:Int,onSelect:(Int)->Unit,onMenu:()->Unit,onNew:()->Unit){
+    Row(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)){
+        ChatCircleAction("Abrir historial de chats","menu",onMenu)
+        Surface(color=Color(0xFF222735),shape=RoundedCornerShape(50),modifier=Modifier.weight(1f)){
+            Row(Modifier.padding(4.dp),verticalAlignment=Alignment.CenterVertically){
+                listOf("Texto","Preguntas","Mapa").forEachIndexed{i,label->
+                    Box(Modifier.weight(if(i==1)1.35f else 1f).height(40.dp).background(if(selected==i)Color(0xFF39304F)else Color.Transparent,RoundedCornerShape(50)).clickable{onSelect(i)}.semantics{this.selected=selected==i;role=Role.Tab},contentAlignment=Alignment.Center){
+                        Text(label,color=if(selected==i)VoiceAccent else MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.labelMedium,fontWeight=if(selected==i)FontWeight.SemiBold else FontWeight.Normal,maxLines=1)
+                    }
+                }
+            }
+        }
+        ChatCircleAction("Nueva conversación","new-chat",onNew)
+    }
+}
 @Composable fun VoiceTabs(selected:Int,onSelect:(Int)->Unit){
     Row(Modifier.fillMaxWidth().background(Color(0xFF141827),RoundedCornerShape(18.dp)).padding(5.dp),horizontalArrangement=Arrangement.spacedBy(4.dp)){
         listOf("En vivo","Guardado","Ajustes").forEachIndexed{i,label->Box(Modifier.weight(1f).background(if(selected==i)Color(0xFF302642)else Color.Transparent,RoundedCornerShape(14.dp)).clickable{onSelect(i)}.semantics{this.selected=selected==i;role=Role.Tab}.padding(vertical=12.dp),contentAlignment=Alignment.Center){Text(label,color=if(selected==i)VoiceAccent else MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.labelLarge,fontWeight=if(selected==i)FontWeight.Bold else FontWeight.Normal)}}
@@ -79,6 +110,10 @@ private val VoiceColors=darkColorScheme(
     Canvas(modifier){
         val w=size.width;val h=size.height;val stroke=Stroke(width=2.dp.toPx(),cap=StrokeCap.Round)
         when(kind){
+            "menu"->{drawLine(color,Offset(w*.16f,h*.3f),Offset(w*.84f,h*.3f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round);drawLine(color,Offset(w*.16f,h*.66f),Offset(w*.61f,h*.66f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round)}
+            "chevron"->{drawLine(color,Offset(w*.2f,h*.35f),Offset(w*.5f,h*.65f),strokeWidth=1.5.dp.toPx(),cap=StrokeCap.Round);drawLine(color,Offset(w*.5f,h*.65f),Offset(w*.8f,h*.35f),strokeWidth=1.5.dp.toPx(),cap=StrokeCap.Round)}
+            "new-chat"->{drawRoundRect(color,Offset(w*.12f,h*.15f),Size(w*.66f,h*.65f),androidx.compose.ui.geometry.CornerRadius(w*.15f),style=stroke);drawLine(color,Offset(w*.49f,h*.55f),Offset(w*.86f,h*.18f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round);drawLine(color,Offset(w*.46f,h*.58f),Offset(w*.58f,h*.56f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round)}
+            "send"->{drawLine(color,Offset(w*.5f,h*.82f),Offset(w*.5f,h*.2f),strokeWidth=2.3.dp.toPx(),cap=StrokeCap.Round);drawLine(color,Offset(w*.2f,h*.48f),Offset(w*.5f,h*.18f),strokeWidth=2.3.dp.toPx(),cap=StrokeCap.Round);drawLine(color,Offset(w*.5f,h*.18f),Offset(w*.8f,h*.48f),strokeWidth=2.3.dp.toPx(),cap=StrokeCap.Round)}
             "close"->{drawLine(color,Offset(w*.25f,h*.25f),Offset(w*.75f,h*.75f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round);drawLine(color,Offset(w*.75f,h*.25f),Offset(w*.25f,h*.75f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round)}
             "add"->{drawLine(color,Offset(w*.2f,h*.5f),Offset(w*.8f,h*.5f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round);drawLine(color,Offset(w*.5f,h*.2f),Offset(w*.5f,h*.8f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round)}
             "search"->{drawCircle(color,w*.27f,Offset(w*.42f,h*.42f),style=stroke);drawLine(color,Offset(w*.63f,h*.63f),Offset(w*.85f,h*.85f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round)}
@@ -115,12 +150,19 @@ private val VoiceColors=darkColorScheme(
 }
 @Composable private fun FloatingTool(label:String,icon:String,onClick:()->Unit){Column(horizontalAlignment=Alignment.CenterHorizontally){Surface(onClick=onClick,color=Color(0xFF273043),shape=RoundedCornerShape(17.dp),shadowElevation=8.dp,modifier=Modifier.size(46.dp)){Box(contentAlignment=Alignment.Center){VoiceGlyph(icon,Color(0xFFCFD5E3),Modifier.size(21.dp))}};Text(label,style=MaterialTheme.typography.labelSmall,color=Color(0xFFABB5C7),modifier=Modifier.padding(top=6.dp))}}
 
-@Composable fun ChatVoiceComposer(listening:Boolean,starting:Boolean,level:Float,enabled:Boolean,onVoice:()->Unit,onWrite:()->Unit){
-    Column(Modifier.fillMaxWidth().background(VoiceBackground).navigationBarsPadding().padding(horizontal=16.dp,vertical=10.dp)){
-        Surface(color=Color(0xFF222735),shape=RoundedCornerShape(30.dp),modifier=Modifier.fillMaxWidth()){
-            Row(Modifier.padding(horizontal=8.dp,vertical=8.dp),verticalAlignment=Alignment.CenterVertically){
-                Surface(onClick=onWrite,color=Color.Transparent,modifier=Modifier.weight(1f),shape=RoundedCornerShape(24.dp)){Text("Escribe o habla con V",color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(14.dp))}
-                Surface(onClick=onVoice,enabled=enabled,color=if(listening)VoiceGreen else Color(0xFFF2F1F7),shape=CircleShape,modifier=Modifier.size(48.dp).semantics{contentDescription=if(starting)"Cancelar preparación"else if(listening)"Pausar escucha"else "Iniciar escucha";role=Role.Button}){
+@Composable fun ChatVoiceComposer(listening:Boolean,starting:Boolean,level:Float,enabled:Boolean,onVoice:()->Unit,text:String,onText:(String)->Unit,onSend:()->Unit){
+    val keyboard=LocalSoftwareKeyboardController.current
+    val focus=LocalFocusManager.current
+    val idleFocus=remember{FocusRequester()}
+    var fieldFocused by remember{mutableStateOf(false)}
+    LaunchedEffect(fieldFocused){if(fieldFocused){withFrameNanos{};keyboard?.show()}}
+    val send={if(enabled&&text.isNotBlank()){focus.clearFocus(force=true);idleFocus.requestFocus();keyboard?.hide();onSend()}}
+    Column(Modifier.fillMaxWidth().focusRequester(idleFocus).focusable().background(VoiceBackground).navigationBarsPadding().imePadding().padding(horizontal=16.dp,vertical=8.dp)){
+        Surface(color=Color(0xFF222735),shape=RoundedCornerShape(32.dp),modifier=Modifier.fillMaxWidth().border(1.dp,MaterialTheme.colorScheme.outlineVariant,RoundedCornerShape(32.dp))){
+            Row(Modifier.padding(horizontal=8.dp,vertical=4.dp),verticalAlignment=Alignment.CenterVertically){
+                TextField(value=text,onValueChange=onText,enabled=enabled,placeholder={Text("Escribe o habla con V")},modifier=Modifier.weight(1f).onFocusChanged{fieldFocused=it.isFocused}.pointerInput(enabled,keyboard){awaitPointerEventScope{while(true){val event=awaitPointerEvent(PointerEventPass.Final);if(enabled&&event.changes.any{it.previousPressed&&!it.pressed})keyboard?.show()}}}.semantics{contentDescription="Mensaje para V"},maxLines=4,shape=RoundedCornerShape(24.dp),colors=TextFieldDefaults.colors(focusedContainerColor=Color.Transparent,unfocusedContainerColor=Color.Transparent,disabledContainerColor=Color.Transparent,focusedIndicatorColor=Color.Transparent,unfocusedIndicatorColor=Color.Transparent),keyboardOptions=KeyboardOptions(imeAction=ImeAction.Send),keyboardActions=KeyboardActions(onSend={send()}))
+                if(text.isNotBlank())IconButton(onClick={send()},enabled=enabled,modifier=Modifier.semantics{contentDescription="Enviar mensaje"}){VoiceGlyph("send",VoiceAccent,Modifier.size(22.dp))}
+                Surface(onClick={focus.clearFocus(force=true);idleFocus.requestFocus();keyboard?.hide();onVoice()},enabled=enabled,color=if(listening)VoiceGreen else Color(0xFFF2F1F7),shape=CircleShape,modifier=Modifier.size(48.dp).semantics{contentDescription=if(starting)"Cancelar preparación"else if(listening)"Pausar escucha"else "Iniciar escucha";role=Role.Button}){
                     Box(contentAlignment=Alignment.Center){VoiceGlyph(if(listening)"pause"else "mic",Color(0xFF171921),Modifier.size(23.dp))}
                 }
             }

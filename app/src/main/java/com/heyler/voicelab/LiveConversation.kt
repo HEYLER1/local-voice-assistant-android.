@@ -22,24 +22,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-@Composable fun LiveConversation(s:AssistantState,onEdit:(SpeechLine)->Unit,onSave:(String,String)->Unit,onSpeak:(String)->Unit,onSummary:()->Unit,onClear:()->Unit,onStop:()->Unit,onSettings:()->Unit,modifier:Modifier=Modifier,section:Int=0,onSection:(Int)->Unit={}){
+@Composable fun LiveConversation(s:AssistantState,onEdit:(SpeechLine)->Unit,onSave:(String,String)->Unit,onSpeak:(String)->Unit,onSummary:()->Unit,onClear:()->Unit,onStop:()->Unit,onSettings:()->Unit,modifier:Modifier=Modifier,section:Int=0,onSection:(Int)->Unit={},preferredAnswerId:String?=null){
     val compact=LocalConfiguration.current.screenHeightDp<480
     val scroll=rememberScrollState()
     var selectedId by rememberSaveable{mutableStateOf<String?>(null)}
+    LaunchedEffect(preferredAnswerId){if(preferredAnswerId!=null)selectedId=preferredAnswerId}
     LaunchedEffect(s.answers.firstOrNull()?.id){if(selectedId==null)selectedId=s.answers.firstOrNull()?.id}
     val selected=s.answers.find{it.id==selectedId}?:s.answers.firstOrNull()
     val scope=rememberCoroutineScope()
     val openAnswer:(String)->Unit={selectedId=it;onSection(1);scope.launch{scroll.animateScrollTo(0)}}
-    Column(modifier.fillMaxSize().verticalScroll(scroll).padding(horizontal=20.dp).padding(top=10.dp,bottom=120.dp),verticalArrangement=Arrangement.spacedBy(if(compact)8.dp else 18.dp)){
-        if(!compact)Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){
-            Surface(color=Color(0xFF252039),shape=RoundedCornerShape(50)){Text(if(s.audioSource=="video")"◉ Audio del video"else "◉ Micrófono",color=VoiceAccent,style=MaterialTheme.typography.labelMedium,modifier=Modifier.padding(horizontal=12.dp,vertical=7.dp))}
-            Text("${s.lines.size} fragmentos · ${s.answers.size} ${if(s.answers.size==1)"pregunta"else "preguntas"}",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(top=8.dp))
-        }
-        Surface(color=Color(0xFF151B28),shape=RoundedCornerShape(18.dp)){
-            Row(Modifier.fillMaxWidth().padding(5.dp),horizontalArrangement=Arrangement.spacedBy(5.dp)){
-                listOf("Texto","Preguntas ${s.answers.size}","Mapa").forEachIndexed{i,label->Surface(onClick={onSection(i)},color=if(section==i)Color(0xFF39304F)else Color.Transparent,shape=RoundedCornerShape(13.dp),modifier=Modifier.weight(1f)){Box(Modifier.padding(vertical=if(compact)6.dp else 12.dp),contentAlignment=Alignment.Center){Text(label,color=if(section==i)VoiceAccent else MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.labelLarge)}}}
-            }
-        }
+    Column(modifier.fillMaxSize().verticalScroll(scroll).padding(horizontal=20.dp).padding(top=8.dp,bottom=24.dp),verticalArrangement=Arrangement.spacedBy(if(compact)8.dp else 18.dp)){
         if(s.generating)TextButton(onClick=onStop){Text("Detener respuesta")}
         if(s.starting)Text(s.status,color=VoiceAccent)
         if(s.models.contains("importar"))Surface(color=Color(0xFF292139),shape=RoundedCornerShape(18.dp)){Column(Modifier.padding(16.dp)){Text("Prepara tu asistente",fontWeight=FontWeight.SemiBold);Text(s.models,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant);TextButton(onClick=onSettings){Text("Configurar modelos")}}}
@@ -80,12 +72,10 @@ import androidx.compose.ui.unit.sp
     }
 }
 @Composable private fun EmptyConversation(){
-    Column(Modifier.fillMaxWidth().padding(vertical=26.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(12.dp)){
-        Box(Modifier.size(80.dp).background(Color(0xFF242139),RoundedCornerShape(28.dp)).border(1.dp,Color(0xFF42365F),RoundedCornerShape(28.dp)),contentAlignment=Alignment.Center){VoiceGlyph("spark",VoiceAccent,Modifier.size(36.dp))}
-        Text("Empieza con tu voz",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.SemiBold)
-        Text("Una conversación. Sus ideas, claras.",color=MaterialTheme.colorScheme.onSurfaceVariant)
-        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){listOf("Texto en vivo","Preguntas","Resumen").forEach{label->Surface(color=Color(0xFF19202D),shape=RoundedCornerShape(50)){Text(label,style=MaterialTheme.typography.labelMedium,color=Color(0xFFBBC2D3),modifier=Modifier.padding(horizontal=12.dp,vertical=8.dp))}}}
-        Text("Toca el micrófono flotante para comenzar",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(top=16.dp))
+    Column(Modifier.fillMaxWidth().padding(top=72.dp,bottom=40.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(14.dp)){
+        androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(R.drawable.brand_mark),contentDescription="V · voz y conocimiento",modifier=Modifier.size(64.dp))
+        Text("¿Qué vamos a descubrir?",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.SemiBold)
+        Text("Habla o escribe. V reúne tus ideas.",style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 @Composable private fun WaitingForQuestion(enabled:Boolean){Surface(color=Color(0xFF18162A),shape=RoundedCornerShape(20.dp),modifier=Modifier.fillMaxWidth()){Row(Modifier.padding(16.dp),verticalAlignment=Alignment.CenterVertically){VoiceGlyph("spark",VoiceAccent,Modifier.size(20.dp));Spacer(Modifier.width(12.dp));Text(if(enabled)"Escucharé las preguntas relevantes y las responderé aquí."else "Las respuestas del audio están desactivadas en Ajustes.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}}}

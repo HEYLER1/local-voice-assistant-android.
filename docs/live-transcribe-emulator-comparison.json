@@ -1,0 +1,10 @@
+{
+  "date": "2026-10-08",
+  "environment": "Android ARM64 emulator",
+  "google_install": "success",
+  "google_launch": "microphone permission prompt",
+  "google_apk_bytes": 30303130,
+  "v_apk_bytes": 141550839,
+  "soniqo_model_zip_bytes": 1108704173,
+  "comparison_status": "Blocked: computer-use tool cannot access emulator window; no matched-audio Google transcription measured. APK sizes exclude installed/external services and separately downloaded Google models. V ZIP is compressed/package size, not RAM usage."
+}

@@ -19,7 +19,7 @@ import java.util.UUID
 // Speaker names are user assigned labels, never inferred identities.
 data class SpeechLine(val id:Long,val text:String,val final:Boolean,val revision:Int=1,val voice:String="Voz sin identificar",val edited:Boolean=false)
 data class LiveAnswer(val id:String,val source:Long?,val revision:Int,val question:String,val text:String="",val status:String="En espera",val firstTextMs:Double?=null)
-data class AssistantState(val conversationTitle:String="",val conversationKey:Long=0,val listening:Boolean=false,val organizationRevision:Int=0,val audioSource:String="mic",val starting:Boolean=false,val history:List<ConversationEntry> = emptyList(),val preparing:Boolean=false,val generating:Boolean=false,val status:String="Listo. El micrófono está apagado.",val models:String="",val lines:List<SpeechLine> = emptyList(),val answers:List<LiveAnswer> = emptyList(),val summary:String="",val highlights:List<String> = emptyList(),val autoAnswers:Boolean=true,val autoSummary:Boolean=true,val voiceLabels:Boolean=false,val saved:List<SavedItem> = emptyList(),val audioLevel:Float=0f,val languageReady:Boolean=false)
+data class AssistantState(val speechEngine:String="moonshine",val transcriptionOnly:Boolean=false,val conversationTitle:String="",val conversationKey:Long=0,val listening:Boolean=false,val organizationRevision:Int=0,val audioSource:String="mic",val starting:Boolean=false,val history:List<ConversationEntry> = emptyList(),val preparing:Boolean=false,val generating:Boolean=false,val status:String="Listo. El micrófono está apagado.",val models:String="",val lines:List<SpeechLine> = emptyList(),val answers:List<LiveAnswer> = emptyList(),val summary:String="",val highlights:List<String> = emptyList(),val autoAnswers:Boolean=true,val autoSummary:Boolean=true,val voiceLabels:Boolean=false,val saved:List<SavedItem> = emptyList(),val audioLevel:Float=0f,val languageReady:Boolean=false)
 private data class Work(val id:String,val source:Long?,val revision:Int,val question:String,val context:String,val summary:Boolean=false,val epoch:Long,val queuedNanos:Long=SystemClock.elapsedRealtimeNanos())
 
 class AssistantViewModel(app:Application):AndroidViewModel(app){
@@ -30,9 +30,15 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
     @Volatile private var rememberConversation=false
     @Volatile private var sessionId=System.currentTimeMillis()
     private val historyLock=Any()
+    private var systemSpeech:SystemSpeech?=null
+    private var closingSystemSpeech:SystemSpeech?=null
+    private var conversationSwitch:Job?=null
+    private var speechSessionToken=0L
+    private var speechRecovery:Job?=null
+    private var speechRecoveries=0
     private var speechWarm:Job?=null
     private val preferences=context.getSharedPreferences("assistant-options",0)
-    val state=MutableStateFlow(AssistantState(audioSource=preferences.getString("audio-source","mic")?:"mic",autoAnswers=preferences.getBoolean("answers",true),autoSummary=preferences.getBoolean("summary",true),voiceLabels=preferences.getBoolean("labels",false)))
+    val state=MutableStateFlow(AssistantState(speechEngine=preferences.getString("speech-engine","moonshine")?:"moonshine",transcriptionOnly=preferences.getBoolean("transcription-only",false),audioSource=preferences.getString("audio-source","mic")?:"mic",autoAnswers=preferences.getBoolean("answers",true),autoSummary=preferences.getBoolean("summary",true),voiceLabels=preferences.getBoolean("labels",false)))
     private val modelLock=Mutex()
     private val queue=Channel<Work>(8)
     private val summaries=Channel<Work>(Channel.CONFLATED)
@@ -81,7 +87,7 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
             }
             generation?.join();generation=null;activeWork=null
         }}
-        viewModelScope.launch{while(isActive){delay(20000);if(state.value.listening&&state.value.autoSummary&&!state.value.generating)requestSummary()}}
+        viewModelScope.launch{while(isActive){delay(20000);if(!state.value.transcriptionOnly&&state.value.listening&&state.value.autoSummary&&!state.value.generating)requestSummary()}}
     }
     private fun valid(w:Work):Boolean=foreground && !state.value.preparing && w.epoch==epoch && ((w.summary&&w.revision==summaryRevision) || (!w.summary&&w.source==null) || (!w.summary&&state.value.autoAnswers&&state.value.lines.any{it.id==w.source}&&signatures[w.source]?.contains(ConversationRules.key(w.question))==true))
     private fun finish(w:Work,status:String){if(w.summary&&status=="Descartada"){summaryQueued=false;lastSummaryText=""};if(!w.summary)state.update{it.copy(answers=it.answers.map{a->if(a.id==w.id)a.copy(status=status)else a})}}
@@ -93,6 +99,7 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
         return (listOf(state.value.summary.take(300))+related+lines.takeLast(3).map{it.text}).filter{it.isNotBlank()}.distinct().joinToString(" ").takeLast(1200)
     }
     private fun enqueue(source:Long?,revision:Int,question:String,summary:Boolean=false){
+        if(state.value.transcriptionOnly&&(state.value.listening||state.value.starting))return
         val work=Work(UUID.randomUUID().toString(),source,revision,question,if(summary)recent()else questionContext(question),summary,epoch)
         if(!summary)state.update{it.copy(answers=(it.answers+LiveAnswer(work.id,source,revision,question)))}
         if(!summary&&activeWork?.summary==true){activeWork?.let{preemptedSummaries.add(it.id)};runCatching{engines.cancel()};generation?.cancel()}
@@ -131,7 +138,7 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
         signatures[line.id]=signature
         if(activeWork?.source==line.id&&ConversationRules.key(activeWork!!.question) !in signature){runCatching{engines.cancel()};generation?.cancel()}
         state.update{it.copy(answers=it.answers.filterNot{a->a.source==line.id&&ConversationRules.key(a.question) !in signature})}
-        if(!foreground||!state.value.autoAnswers||questions.isEmpty())return
+        if(!foreground||state.value.transcriptionOnly||!state.value.autoAnswers||questions.isEmpty())return
         debounce[line.id]=viewModelScope.launch{
             delay(if(final)500 else 1500)
             if(signatures[line.id]!=signature)return@launch
@@ -158,10 +165,10 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
             state.update{it.copy(answers=(it.answers+LiveAnswer(UUID.randomUUID().toString(),null,0,question.trim(),answer,"Consulta local de textos guardados")))}
         }else enqueue(null,0,question.trim().take(600))
     }
-    fun requestSummary(){val text=recent();if(text.length<100||text==lastSummaryText||summaryQueued)return;summaryQueued=true;lastSummaryText=text;enqueue(null,summaryRevision,"",true)}
+    fun requestSummary(){if(state.value.transcriptionOnly&&(state.value.listening||state.value.starting))return;val text=recent();if(text.length<100||text==lastSummaryText||summaryQueued)return;summaryQueued=true;lastSummaryText=text;enqueue(null,summaryRevision,"",true)}
     fun stopResponse(){runCatching{engines.cancel()};generation?.cancel();while(true){val w=queue.tryReceive().getOrNull()?:break;finish(w,"Respuesta detenida")};while(summaries.tryReceive().isSuccess){};preemptedSummaries.clear();summaryQueued=false;lastSummaryText=""}
     fun setAudioSource(value:String){require(value in listOf("mic","video"));pause();preferences.edit().putString("audio-source",value).apply();state.update{it.copy(audioSource=value)}}
-    fun pause(){val wasListening=state.value.listening;val stopped=capture;PlaybackCaptureService.stopCapture();recorder?.let{runCatching{it.stop()}};stopped?.cancel();state.update{it.copy(listening=false,starting=false,audioLevel=0f)};if(wasListening&&foreground){finishJob?.cancel();finishJob=viewModelScope.launch{stopped?.join();delay(350);if(foreground&&!state.value.listening&&!state.value.starting){state.update{it.copy(organizationRevision=it.organizationRevision+1)};while(summaryQueued&&isActive)delay(100);if(foreground&&!state.value.listening&&!state.value.starting)requestSummary()}}}}
+    fun pause(){speechRecovery?.cancel();speechRecovery=null;systemSpeech?.let{it.stop();closingSystemSpeech=it};systemSpeech=null;speechSessionToken++;val wasListening=state.value.listening;val stopped=capture;PlaybackCaptureService.stopCapture();recorder?.let{runCatching{it.stop()}};stopped?.cancel();state.update{it.copy(listening=false,starting=false,audioLevel=0f)};if(wasListening&&foreground){finishJob?.cancel();finishJob=viewModelScope.launch{stopped?.join();delay(350);if(foreground&&!state.value.listening&&!state.value.starting){state.update{it.copy(organizationRevision=it.organizationRevision+1)};while(summaryQueued&&isActive)delay(100);if(foreground&&!state.value.listening&&!state.value.starting)requestSummary()}}}}
     fun suspendSession(){pause();finishJob?.cancel();stopResponse();warming?.cancel();debounce.values.forEach{it.cancel()};debounce.clear()}
     fun background(){foreground=false;suspendSession();if(rememberConversation)persistConversation();state.update{it.copy(history=conversations.list())}}
     fun resumeForeground(){foreground=true}
@@ -172,56 +179,136 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
         prepareSpeech()
     }
     internal fun temporaryConversation(){synchronized(historyLock){rememberConversation=false};clearSession(keepHistory=true)}
-    fun prepareSpeech(){if(speechWarm?.isActive==true||engines.speech!=null)return;speechWarm=viewModelScope.launch(Dispatchers.IO){try{modelLock.withLock{engines.loadSpeech()}}catch(_:Throwable){}}}
-    fun newConversation(){synchronized(historyLock){if(rememberConversation)persistConversation();clearSession(keepHistory=true);sessionId=System.currentTimeMillis();preferences.edit().putLong("session-id",sessionId).apply();state.update{it.copy(history=conversations.list())}}}
-    fun openConversation(id:Long){synchronized(historyLock){if(rememberConversation)persistConversation();suspendSession();epoch++;signatures.clear();val saved=synchronized(historyLock){conversations.load(id)}?:return;sessionId=id;preferences.edit().putLong("session-id",id).apply();state.update{it.copy(conversationTitle=saved.conversationTitle,conversationKey=sessionId,lines=saved.lines,answers=saved.answers,summary=saved.summary,highlights=ConversationRules.salient(saved.lines.joinToString(" "){l->l.text}),organizationRevision=it.organizationRevision+1,history=conversations.list())}}}
+    fun prepareSpeech(){if(state.value.speechEngine!="moonshine")return;if(speechWarm?.isActive==true||engines.speech!=null)return;speechWarm=viewModelScope.launch(Dispatchers.IO){try{modelLock.withLock{engines.loadSpeech()}}catch(_:Throwable){}}}
+    private fun switchConversation(id:Long?){
+        if(conversationSwitch?.isActive==true)return
+        suspendSession()
+        if(rememberConversation)persistConversation()
+        epoch++
+        state.update{it.copy(starting=true,status="Cerrando la escucha anterior…")}
+        val previousCapture=capture
+        val previousSpeech=closingSystemSpeech
+        conversationSwitch=viewModelScope.launch{
+            try{
+                previousCapture?.join()
+                previousSpeech?.awaitStopped()
+                closingSystemSpeech=null
+                synchronized(historyLock){
+                    signatures.clear()
+                    if(id==null){
+                        clearSession(keepHistory=true)
+                        sessionId=System.currentTimeMillis()
+                        preferences.edit().putLong("session-id",sessionId).apply()
+                        state.update{it.copy(status="Nueva conversación. Pulsa el micrófono para escuchar.",history=conversations.list())}
+                    }else{
+                        val saved=conversations.load(id)?:error("Conversación no disponible")
+                        sessionId=id
+                        preferences.edit().putLong("session-id",id).apply()
+                        state.update{it.copy(conversationTitle=saved.conversationTitle,conversationKey=sessionId,lines=saved.lines,answers=saved.answers,summary=saved.summary,highlights=ConversationRules.salient(saved.lines.joinToString(" "){l->l.text}),organizationRevision=it.organizationRevision+1,history=conversations.list(),status="Conversación abierta. Pulsa el micrófono para continuar.")}
+                    }
+                }
+            }catch(e:CancellationException){throw e}
+            catch(e:Throwable){state.update{it.copy(status="No se pudo cambiar de conversación: ${e.message}")}}
+            finally{state.update{it.copy(starting=false,listening=false)}}
+        }
+    }
+    fun newConversation(){switchConversation(null)}
+    fun openConversation(id:Long){switchConversation(id)}
     fun renameConversation(title:String){state.update{it.copy(conversationTitle=title.trim().take(100))};if(rememberConversation)persistConversation()}
     fun deleteConversation(id:Long){if(id==sessionId)clearSession()else synchronized(historyLock){conversations.delete(id)};state.update{it.copy(history=conversations.list())}}
 
     fun clearSession(keepHistory:Boolean=false){suspendSession();epoch++;debounce.values.forEach{it.cancel()};debounce.clear();signatures.clear();state.update{it.copy(conversationTitle="",conversationKey=System.nanoTime(),organizationRevision=0,lines=emptyList(),answers=emptyList(),summary="",highlights=emptyList(),status="Sesión borrada. Los textos guardados se conservan.")};if(rememberConversation&&!keepHistory)synchronized(historyLock){conversations.delete(sessionId)};state.update{it.copy(history=conversations.list())}}
+    fun setSpeechEngine(value:String){require(value in listOf("moonshine","system","soniqo"));pause();preferences.edit().putString("speech-engine",value).apply();state.update{it.copy(speechEngine=value)};if(value=="moonshine")prepareSpeech()}
+    fun setTranscriptionOnly(value:Boolean){preferences.edit().putBoolean("transcription-only",value).apply();state.update{it.copy(transcriptionOnly=value)};if(value){stopResponse();debounce.values.forEach{it.cancel()};debounce.clear()}else{signatures.clear();reconcileQuestions()}}
+    internal fun recoverSystemSpeech(message:String,token:Long=speechSessionToken){
+        if(token!=speechSessionToken||!foreground)return
+        val old=systemSpeech
+        old?.stop()
+        systemSpeech=null
+        closingSystemSpeech=old
+        speechRecoveries++
+        if(speechRecoveries>3){state.update{it.copy(starting=false,listening=false,audioLevel=0f,status="$message. No se pudo recuperar tras tres intentos. Revisa el micrófono o selecciona otro motor.")};return}
+        state.update{it.copy(starting=true,listening=false,audioLevel=0f,status="$message. Reconectando reconocimiento local ($speechRecoveries/3)…")}
+        speechRecovery=viewModelScope.launch{
+            old?.awaitStopped()
+            delay(500L*speechRecoveries)
+            if(token==speechSessionToken && foreground && conversationSwitch?.isActive!=true){
+                closingSystemSpeech=null
+                state.update{it.copy(starting=false)}
+                startListening(null,null,true)
+            }
+        }
+    }
     @Suppress("MissingPermission")
-    fun listen(projection:android.media.projection.MediaProjection?=null){
-        if(capture?.isActive==true||importJob?.isActive==true)return
+    fun listen(projection:android.media.projection.MediaProjection?=null){startListening(projection,null)}
+    internal fun listenFromAudio(source:android.os.ParcelFileDescriptor){startListening(null,source)}
+    @Suppress("MissingPermission")
+    private fun startListening(projection:android.media.projection.MediaProjection?,audioSource:android.os.ParcelFileDescriptor?,recovering:Boolean=false){
+        if(conversationSwitch?.isActive==true||state.value.starting||state.value.listening||capture?.isActive==true||importJob?.isActive==true)return
+        if(projection==null&&state.value.speechEngine=="system"){
+            if(!recovering)speechRecoveries=0
+            state.update{it.copy(starting=true,status="Preparando reconocimiento local de Android…")}
+            val captureEpoch=epoch
+            val sessionToken=++speechSessionToken
+            capture=viewModelScope.launch{try{closingSystemSpeech?.awaitStopped();closingSystemSpeech=null;if(state.value.transcriptionOnly){stopResponse();warming?.cancelAndJoin();generation?.join();modelLock.withLock{engines.unloadLanguage();state.update{it.copy(languageReady=false)}}};speechWarm?.join();modelLock.withLock{engines.unloadSpeech()}
+                systemSpeech=SystemSpeech(context,{id,text,final->if(epoch==captureEpoch && sessionToken==speechSessionToken)observe(id,text,final,captureEpoch)},{if(sessionToken==speechSessionToken)state.update{it.copy(starting=false,listening=true,status="Escuchando · Android local continuo")}},{message->if(sessionToken==speechSessionToken)state.update{it.copy(starting=false,listening=false,audioLevel=0f,status=message)}},{message->recoverSystemSpeech(message,sessionToken)},{level->if(sessionToken==speechSessionToken)state.update{it.copy(audioLevel=level)}})
+                currentCoroutineContext().ensureActive();systemSpeech?.start(audioSource)
+            }catch(e:CancellationException){throw e}catch(e:Throwable){state.update{it.copy(starting=false,listening=false,status="No se pudo preparar el reconocimiento local: ${e.message}")}}};return
+        }
         state.update{it.copy(starting=true,status="Preparando modelo de voz; aún no se está grabando…")}
         val previousCapture=capture
         capture=viewModelScope.launch(Dispatchers.IO){
             previousCapture?.join();currentCoroutineContext().ensureActive();state.update{it.copy(starting=true)}
             var input:AudioRecord?=null
+            var soniqo:SoniqoSpeech?=null
             var listener:java.util.function.Consumer<TranscriptEvent>?=null
             var started=false
             var noise:android.media.audiofx.NoiseSuppressor?=null
             try{
-                speechWarm?.join();if(engines.speech==null)modelLock.withLock{engines.loadSpeech()};currentCoroutineContext().ensureActive()
-
-                val t=checkNotNull(engines.speech)
-                val streamBase=++streamSerial*1000000L;val captureEpoch=epoch
-                val visitor=object:TranscriptEventListener(){
-                    fun update(line:TranscriptLine,final:Boolean){if(epoch==captureEpoch)observe(streamBase+line.id,line.text,final,captureEpoch);line.audioData=null}
-                    override fun onLineTextChanged(e:TranscriptEvent.LineTextChanged){update(e.line,false)}
-                    override fun onLineCompleted(e:TranscriptEvent.LineCompleted){update(e.line,true)}
+                if(state.value.transcriptionOnly){stopResponse();warming?.cancelAndJoin();generation?.join();modelLock.withLock{engines.unloadLanguage();state.update{it.copy(languageReady=false)}}}
+                val useSoniqo=state.value.speechEngine=="soniqo"
+                val captureEpoch=epoch
+                speechWarm?.join()
+                if(useSoniqo){
+                    modelLock.withLock{engines.unloadSpeech()}
+                    soniqo=SoniqoSpeech(File(context.filesDir,"soniqo"),this,{id,text,final->if(epoch==captureEpoch)observe(id,text,final,captureEpoch)},{message->state.update{it.copy(status="Error del motor Soniqo: $message")}})
+                }else{
+                    if(engines.speech==null)modelLock.withLock{engines.loadSpeech()}
+                    val streamBase=++streamSerial*1000000L
+                    val visitor=object:TranscriptEventListener(){
+                        fun update(line:TranscriptLine,final:Boolean){if(epoch==captureEpoch)observe(streamBase+line.id,line.text,final,captureEpoch);line.audioData=null}
+                        override fun onLineTextChanged(e:TranscriptEvent.LineTextChanged){update(e.line,false)}
+                        override fun onLineCompleted(e:TranscriptEvent.LineCompleted){update(e.line,true)}
+                    }
+                    listener=java.util.function.Consumer{it.accept(visitor)};engines.speech?.addListener(listener)
                 }
-                listener=java.util.function.Consumer{it.accept(visitor)};t.addListener(listener)
+                currentCoroutineContext().ensureActive()
                 val min=AudioRecord.getMinBufferSize(16000,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT);check(min>0)
                 input=if(projection==null)AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION,16000,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT,maxOf(min,6400))else{
                     val config=AudioPlaybackCaptureConfiguration.Builder(projection).addMatchingUsage(AudioAttributes.USAGE_MEDIA).addMatchingUsage(AudioAttributes.USAGE_GAME).addMatchingUsage(AudioAttributes.USAGE_UNKNOWN).excludeUid(android.os.Process.myUid()).build()
                     AudioRecord.Builder().setAudioPlaybackCaptureConfig(config).setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(16000).setChannelMask(AudioFormat.CHANNEL_IN_MONO).build()).setBufferSizeInBytes(maxOf(min,6400)).build()
                 };check(input.state==AudioRecord.STATE_INITIALIZED){"No se pudo abrir el micrófono."}
                 noise=runCatching{if(projection==null&&android.media.audiofx.NoiseSuppressor.isAvailable())android.media.audiofx.NoiseSuppressor.create(input.audioSessionId)?.apply{enabled=true}else null}.getOrNull()
-                recorder=input;t.start();started=true;input.startRecording();state.update{it.copy(listening=true,starting=false,status=if(projection==null)"Escuchando micrófono · audio solo en memoria"else "Audio directo del video · sin micrófono ni imágenes")}
-                if(state.value.autoAnswers&&warming?.isActive!=true)warming=viewModelScope.launch(Dispatchers.IO){try{modelLock.withLock{engines.loadLanguage();currentCoroutineContext().ensureActive();state.update{it.copy(languageReady=true)}}}catch(_:CancellationException){}catch(_:Throwable){state.update{it.copy(languageReady=false)}}}
+                recorder=input;if(soniqo!=null)soniqo.start()else engines.speech?.start();started=true;input.startRecording();state.update{it.copy(listening=true,starting=false,status=if(projection==null)"Escuchando micrófono · audio solo en memoria"else "Audio directo del video · sin micrófono ni imágenes")}
+                if(!state.value.transcriptionOnly&&state.value.autoAnswers&&warming?.isActive!=true)warming=viewModelScope.launch(Dispatchers.IO){try{modelLock.withLock{engines.loadLanguage();currentCoroutineContext().ensureActive();state.update{it.copy(languageReady=true)}}}catch(_:CancellationException){}catch(_:Throwable){state.update{it.copy(languageReady=false)}}}
                 var emptyPlaybackFrames=0
                 val shorts=ShortArray(3200)
-                try{while(isActive){val n=input.read(shorts,0,shorts.size);check(n>0){"Captura detenida."};val audio=FloatArray(n){shorts[it]/32768f};val rms=kotlin.math.sqrt(audio.sumOf{(it*it).toDouble()}/n).toFloat();state.update{it.copy(audioLevel=(rms*5).coerceIn(0f,1f))};if(projection!=null){emptyPlaybackFrames=if(rms<.00001f)emptyPlaybackFrames+n else 0;if(emptyPlaybackFrames>=16000*12){audio.fill(0f);error("No llega audio del video. Reprodúcelo en pantalla dividida; la aplicación puede bloquear la captura. No se cambiará al micrófono.")}};try{t.addAudio(audio,16000)}finally{audio.fill(0f);shorts.fill(0)}}}finally{shorts.fill(0)}
+                try{while(isActive){val n=input.read(shorts,0,shorts.size);check(n>0){"Captura detenida."};val audio=FloatArray(n){shorts[it]/32768f};val rms=kotlin.math.sqrt(audio.sumOf{(it*it).toDouble()}/n).toFloat();state.update{it.copy(audioLevel=(rms*5).coerceIn(0f,1f))};if(projection!=null){emptyPlaybackFrames=if(rms<.00001f)emptyPlaybackFrames+n else 0;if(emptyPlaybackFrames>=16000*12){audio.fill(0f);error("No llega audio del video. Reprodúcelo en pantalla dividida; la aplicación puede bloquear la captura. No se cambiará al micrófono.")}};try{if(soniqo!=null)soniqo.addAudio(audio)else engines.speech?.addAudio(audio,16000)}finally{audio.fill(0f);shorts.fill(0)}}}finally{shorts.fill(0)}
             }catch(e:CancellationException){}catch(e:Throwable){if(isActive)state.update{it.copy(status="No se pudo escuchar: ${e.message}")}}
-            finally{runCatching{input?.stop()};noise?.release();input?.release();recorder=null;if(projection!=null)withContext(NonCancellable+Dispatchers.Main.immediate){PlaybackCaptureService.stopCapture()};if(started)runCatching{engines.speech?.stop()};listener?.let{runCatching{engines.speech?.removeListener(it)}};state.update{it.copy(listening=false,starting=false,audioLevel=0f,status=if(it.status.startsWith("No se pudo"))it.status else "Escucha pausada.")}}
+            finally{runCatching{soniqo?.close()};runCatching{input?.stop()};noise?.release();input?.release();recorder=null;if(projection!=null)withContext(NonCancellable+Dispatchers.Main.immediate){PlaybackCaptureService.stopCapture()};if(started)runCatching{engines.speech?.stop()};listener?.let{runCatching{engines.speech?.removeListener(it)}};state.update{it.copy(listening=false,starting=false,audioLevel=0f,status=if(it.status.startsWith("No se pudo"))it.status else "Escucha pausada.")}}
         }
+    }
+    fun importSoniqo(uri:Uri){
+        if(state.value.preparing)return
+        suspendSession();state.update{it.copy(preparing=true,status="Importando modelos de Soniqo…")}
+        importJob=viewModelScope.launch(Dispatchers.IO){try{capture?.join();ModelImport.soniqo(context,uri);preferences.edit().putString("speech-engine","soniqo").apply();state.update{it.copy(speechEngine="soniqo",status="Soniqo listo. Pulsa el micrófono.")}}catch(e:Throwable){state.update{it.copy(status="No se pudo importar Soniqo: ${e.message}")}}finally{state.update{it.copy(preparing=false)};refreshModels()}}
     }
     fun importModel(uri:Uri,speech:Boolean){
         if(state.value.preparing)return
         suspendSession();state.update{it.copy(preparing=true,status="Importando modelo…")}
         importJob=viewModelScope.launch(Dispatchers.IO){try{capture?.join();generation?.join();modelLock.withLock{engines.close();state.update{it.copy(languageReady=false)};if(speech)ModelImport.speech(context,uri)else ModelImport.language(context,uri)};state.update{it.copy(status="Modelo importado.")}}catch(e:Throwable){state.update{it.copy(status="No se pudo importar: ${e.message}")}}finally{state.update{it.copy(preparing=false)};refreshModels()}}
     }
-    private fun refreshModels(){state.update{it.copy(models="Voz: ${if(File(context.filesDir,"speech/streaming_config.json").exists())"lista" else "importar ZIP"} · Respuestas: ${if(File(context.filesDir,"model.litertlm").exists())"listas" else "importar modelo"}")}}
+    private fun refreshModels(){state.update{it.copy(models="Soniqo: ${if(File(context.filesDir,"soniqo/parakeet-encoder-int8.onnx").exists())"listo"else "importar ZIP"} · Voz: ${if(File(context.filesDir,"speech/streaming_config.json").exists())"lista" else "importar ZIP"} · Respuestas: ${if(File(context.filesDir,"model.litertlm").exists())"listas" else "importar modelo"}")}}
     private fun reloadSaved(){state.update{it.copy(saved=store.list())}}
     fun save(id:Long?,kind:String,text:String,scope:String,due:String)=saveWithSource(id,kind,text,scope,due,"Texto escrito por usuario")
     fun saveWithSource(id:Long?,kind:String,text:String,scope:String,due:String,source:String){store.saveWithSource(id,kind,text,scope,due,source);reloadSaved()}

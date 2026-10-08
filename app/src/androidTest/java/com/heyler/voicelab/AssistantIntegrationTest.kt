@@ -13,6 +13,10 @@ class AssistantIntegrationTest {
     private val context=InstrumentationRegistry.getInstrumentation().targetContext
     private fun waitFor(timeout:Long=45000,condition:()->Boolean){val deadline=SystemClock.elapsedRealtime()+timeout;while(!condition()&&SystemClock.elapsedRealtime()<deadline)SystemClock.sleep(100);assertTrue("Timed out",condition())}
     private fun withAssistant(block:(AssistantViewModel)->Unit){val vm=AssistantViewModel(context.applicationContext as Application);val store=ViewModelStore();store.put("assistant",vm);try{block(vm)}finally{vm.background();store.clear();SystemClock.sleep(500)}}
+    @Test fun transcriptionPriorityKeepsTextWithoutQueuingAnswers()=withAssistant{vm->
+        vm.temporaryConversation();val old=vm.state.value.transcriptionOnly
+        try{vm.setTranscriptionOnly(true);vm.observe(91234,"¿Cómo se calcula el área de un círculo con cinco metros de radio?",true);waitFor{vm.state.value.lines.any{it.id==91234L}};SystemClock.sleep(1800);assertTrue(vm.state.value.answers.isEmpty());assertFalse(vm.state.value.generating)}finally{vm.setTranscriptionOnly(old)}
+    }
     @Test fun realAudioToLiveAnswerAndSummary()=withAssistant{vm->
         val speech=LocalEngines(context)
         val before=context.filesDir.listFiles()?.map{it.name}?.toSet()?:emptySet()

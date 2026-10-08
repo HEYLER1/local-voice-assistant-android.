@@ -11,3 +11,15 @@ local.properties
 models/
 .env
 *.sqlite*
+
+# Local artifacts and third-party packages
+.cxx/
+**/.cxx/
+dist/
+*.xapk
+*.apks
+*.pcm
+*.mp3
+*.key
+*.ses
+*.log

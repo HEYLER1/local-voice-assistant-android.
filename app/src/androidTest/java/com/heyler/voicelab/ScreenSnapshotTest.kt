@@ -38,6 +38,43 @@ class ScreenSnapshotTest {
         file.outputStream().use{checkNotNull(bitmap).compress(Bitmap.CompressFormat.PNG,100,it)};bitmap?.recycle()
         assertTrue(file.length()>1000);return file
     }
+    @Test fun modernChatWithSyntheticLayout(){
+        instrumentation.startActivitySync(Intent(context,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        val activity=checkNotNull(current()) as MainActivity
+        var vm:AssistantViewModel?=null
+        try{
+            instrumentation.runOnMainSync{
+                vm=ViewModelProvider(activity)[AssistantViewModel::class.java]
+                checkNotNull(vm).temporaryConversation()
+                checkNotNull(vm).state.value=AssistantState(conversationKey=-17,models="Listos",history=emptyList())
+                activity.setContent{VoiceTheme{AssistantScreen(checkNotNull(vm),{}, {}, {}, {}, {}, {})}}
+            }
+            render(activity,"v-modern-empty-synthetic.png")
+            instrumentation.runOnMainSync{
+                checkNotNull(vm).state.value=checkNotNull(vm).state.value.copy(conversationTitle="Astronomía · clase 1",lines=listOf(SpeechLine(1701,"Un eclipse solar ocurre cuando la Luna pasa entre la Tierra y el Sol. ¿Por qué vemos bandas de sombra durante un eclipse?",true)),answers=listOf(LiveAnswer("sample",1701,1,"¿Por qué vemos bandas de sombra durante un eclipse?","Las variaciones del aire desvían la luz del Sol y pueden producir franjas claras y oscuras cerca de la totalidad.","Lista")))
+            }
+            render(activity,"v-modern-text-synthetic.png")
+            instrumentation.runOnMainSync{activity.setContent{VoiceTheme{AssistantScreen(checkNotNull(vm),{}, {}, {}, {}, {}, {},initialSection=1)}}}
+            render(activity,"v-modern-questions-synthetic.png")
+            val example=checkNotNull(vm).state.value
+            instrumentation.runOnMainSync{activity.setContent{VoiceTheme{AssistantScreen(checkNotNull(vm),{}, {}, {}, {}, {}, {},initialSection=2)}}}
+            render(activity,"v-modern-map-synthetic.png")
+            instrumentation.runOnMainSync{activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE}
+            waitFor{val candidate=current();candidate!=null&&candidate.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE}
+            val landscape=checkNotNull(current()) as MainActivity
+            // Recreating MainActivity restores a real chat: replace it before capturing.
+            instrumentation.runOnMainSync{
+                vm=ViewModelProvider(landscape)[AssistantViewModel::class.java]
+                checkNotNull(vm).temporaryConversation()
+                checkNotNull(vm).state.value=example
+                landscape.setContent{VoiceTheme{AssistantScreen(checkNotNull(vm),{}, {}, {}, {}, {}, {})}}
+            }
+            render(landscape,"v-modern-landscape-synthetic.png")
+        }finally{
+            vm?.restoreConversation()
+            current()?.let{last->instrumentation.runOnMainSync{last.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;last.finish()}}
+        }
+    }
     @Test fun appPortraitAndLandscapeWithSyntheticContent(){
         instrumentation.startActivitySync(Intent(context,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         var activity=checkNotNull(current());var vm:AssistantViewModel?=null;var previous=true
