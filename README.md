@@ -2,17 +2,45 @@
 
 ![Logo de V](docs/assets/v-logo.svg)
 
-Asistente nativo en Kotlin y Jetpack Compose: transcripción local, preguntas en vivo, historial privado y mapas de conversación.
+Asistente nativo en Kotlin y Jetpack Compose: transcripción local, preguntas en vivo, historial privado y apuntes para estudiar.
 
-## Interfaz actual · 0.17
+## Interfaz actual · 0.20
 
-Texto, Preguntas y Mapa fijos arriba. Menú lateral de historial, nuevas conversaciones y escritura con micrófono en la misma pantalla. Conserva el fondo oscuro y los acentos violeta y verde de V.
+Texto, Preguntas y Resumen fijos arriba. Historial lateral compacto con búsqueda y opciones por conversación. Escritura y micrófono en el mismo chat. La paleta conserva el fondo oscuro y los acentos violeta y verde de V.
 
 Las capturas siguientes usan contenido ficticio.
 
-![Chat moderno con texto de ejemplo](docs/assets/v-modern-text-synthetic.png)
+![Chat con texto de ejemplo](docs/assets/v-modern-text-synthetic.png)
 
-![Mapa con texto de ejemplo](docs/assets/v-modern-map-synthetic.png)
+![Resumen para estudiar con texto de ejemplo](docs/assets/v-study-summary-synthetic.png)
+
+## Android 0.20: historial más sencillo
+
+El sidebar conserva los colores de V y presenta los chats como filas de texto agrupadas por fecha, sin tarjetas ni contadores de fragmentos. La conversación activa tiene una marca violeta discreta. La cabecera reúne el logo, Nueva conversación y las opciones del chat actual; la búsqueda no tiene fondo y los accesos a Textos guardados y Ajustes quedan al pie. Cada conversación mantiene su menú para renombrar o eliminar.
+
+Verificación: compilación correcta y dos pruebas instrumentadas pasaron en el emulador. Se comprobó que renombrar y eliminar desde el menú no abren el chat y se revisó la captura con historial ficticio. La prueba de menús verifica los callbacks; la conservación del contenido al renombrar fue comprobada en 0.18. No se cambió el motor de transcripción.
+
+![Sidebar con conversaciones ficticias](docs/assets/v-study-sidebar-synthetic.png)
+
+## Android 0.19: resumen para estudiar
+
+La pestaña se llama Resumen. La síntesis se muestra directamente, con Actualizar y Guardar. Debajo, cuatro apartados compactos sin tarjetas grandes: Ideas, Conceptos, Repaso y Cifras. Ideas presenta hasta seis extractos numerados; Conceptos reconoce definiciones explícitas mediante patrones; Repaso permite intentar responder las preguntas de la conversación antes de revelar las explicaciones; Cifras conserva hasta ocho extractos numéricos para revisar con el audio. Cada extracto abre el fragmento original para leerlo o corregirlo. Se conserva la paleta de V y el historial existente.
+
+Los apuntes son extractivos: mantienen el texto y su ID de origen, omiten preguntas puntuadas y deduplican frases. No generan definiciones nuevas. Los límites de selección no representan todos los puntos importantes de una clase ni validan la transcripción. La síntesis del modelo sigue usando contexto reciente; no es un resumen exhaustivo garantizado de una clase larga. La explicación del repaso es la respuesta local guardada, no una respuesta certificada del docente. La vista se reconstruye al abrir una conversación desde su transcripción, preguntas y resumen almacenados.
+
+Verificación: compilación, pruebas unitarias de conservación de fuentes/cifras/deduplicación y prueba instrumentada del repaso y acceso al original. Capturas revisadas con contenido ficticio.
+
+## Android 0.18: texto sin tarjetas e idiomas locales
+
+Se eliminan las tarjetas y contornos del texto, las respuestas, la lista de preguntas, el mapa y los grupos de Ajustes. El título deja de ocupar una fila en la pantalla principal. En el sidebar, el menú de cada conversación permite renombrar o eliminar; el menú superior permite nombrar una conversación nueva. Renombrar una conversación guardada no la abre ni cambia la transcripción. Eliminar solicita confirmación.
+
+Ajustes muestra el idioma de Android local, idiomas admitidos e instalados, descarga y comprobación de estado. Al abrir la app se consulta el servicio y se solicita automáticamente español si falta y no está pendiente. Se prefiere es-ES; si el proveedor solo admite otra variante de español, se utiliza esa. Una descarga pendiente o fallida no se presenta como completada. Android 13 permite solicitar la descarga; Android 14 o posterior permite recibir progreso si el proveedor lo implementa. El idioma elegido se guarda y se pasa a la sesión continua. Antes de solicitar una descarga se vuelve a comprobar si el idioma ya está instalado, para evitar esperas redundantes. Estos controles no cambian los modelos de Moonshine o Soniqo. Si falta el servicio local, se ofrece abrir la página oficial de los servicios de voz de Google; su instalación no garantiza reconocimiento local compatible en todos los dispositivos.
+
+La descarga la realiza el servicio del sistema, con conexión y posibles condiciones o confirmaciones propias. V no incorpora pesos privados de Live Transcribe y mantiene su manifiesto sin permiso de Internet. No se graba audio al consultar o descargar idiomas.
+
+Verificación: compilación y pruebas unitarias; cinco pruebas instrumentadas verificaron el servicio real con español ya instalado, selección del idioma en el intent, renombrado/borrado de ejemplos sin afectar otros chats, menús del sidebar, escritura y renders con texto ficticio. La política automática se verifica por separado; no se desinstaló el español del emulador para simular una primera descarga. La comprobación de escritura verifica solicitudes de teclado, no su visibilidad física.
+
+Referencias: [SpeechRecognizer](https://developer.android.com/reference/android/speech/SpeechRecognizer), [ModelDownloadListener](https://developer.android.com/reference/android/speech/ModelDownloadListener), [servicios de voz de Google](https://play.google.com/store/apps/details?id=com.google.android.tts).
 
 ## Android 0.17: conversación más despejada
 
@@ -102,12 +130,12 @@ El historial conserva la transcripción, preguntas, respuestas y resumen de cada
 
 # V · Asistente Android independiente
 
-Versión 0.17: app nativa Kotlin + Jetpack Compose para Android ARM64. El Galaxy A54 de 8 GB se utilizó en el laboratorio de rendimiento. Escucha, transcripción progresiva, preguntas relevantes, respuestas locales, resumen reciente y textos seleccionados persistentes. Funciona sin servidor Mac y sin servicios remotos de transcripción. El laboratorio de rendimiento sigue disponible en Ajustes.
+Versión 0.20: app nativa Kotlin + Jetpack Compose para Android ARM64. El Galaxy A54 de 8 GB se utilizó en el laboratorio de rendimiento. Escucha, transcripción progresiva, preguntas relevantes, respuestas locales, resumen reciente y textos seleccionados persistentes. Funciona sin servidor Mac y sin servicios remotos de transcripción. El laboratorio de rendimiento sigue disponible en Ajustes.
 
 ## Interfaz y uso
 
 - Campo de escritura y micrófono circular en la barra inferior del chat. Toca el micrófono para iniciar y vuelve a tocar para pausar. El indicador muestra RMS medido del audio del micrófono, no una animación de audio simulado.
-- Diseño oscuro con acentos violetas; la escucha usa un indicador verde. Texto, Preguntas y Mapa en la cabecera; historial, textos guardados y Ajustes en el menú lateral.
+- Diseño oscuro con acentos violetas; la escucha usa un indicador verde. Texto, Preguntas y Resumen en la cabecera; historial, textos guardados y Ajustes en el menú lateral.
 - Texto plano continuo por defecto. «Editar o guardar fragmentos» permite corregir texto, asignar una etiqueta manual y guardar una selección. Activar «Etiquetar voces» muestra los bloques; no añade clasificaciones de pregunta/afirmación al texto.
 - Respuestas progresivas junto a la transcripción en ventanas de al menos 600 dp; en vertical aparece primero la respuesta más reciente para conservar legibilidad. Explicaciones de conocimiento general, sin verificación externa.
 - Detección por señales lingüísticas conservadoras: requiere una pregunta con contenido, descarta fragmentos incoherentes conocidos y no responde a cualquier «que». No es una evaluación semántica infalible ni una reparación del audio.

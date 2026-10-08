@@ -33,7 +33,7 @@ internal class SystemSpeech(private val context:Context,private val onText:(Long
     private var capture:Future<*>?=null
     internal var sessionStarts=0;private set
     @Suppress("MissingPermission")
-    fun start(audioSource:ParcelFileDescriptor?=null){
+    fun start(audioSource:ParcelFileDescriptor?=null,language:String=DEFAULT_SPEECH_LANGUAGE){
         check(Looper.myLooper()==Looper.getMainLooper())
         check(stopped.isCompleted){"La captura anterior todavía se está cerrando"}
         if(Build.VERSION.SDK_INT<33){onFailure("La escucha continua de Android local requiere Android 13 o superior. Selecciona Moonshine.");return}
@@ -57,13 +57,13 @@ internal class SystemSpeech(private val context:Context,private val onText:(Long
                 override fun onError(error:Int){if(!running)return
                     if(error in listOf(SpeechRecognizer.ERROR_SERVER,SpeechRecognizer.ERROR_SERVER_DISCONNECTED,SpeechRecognizer.ERROR_RECOGNIZER_BUSY,SpeechRecognizer.ERROR_SPEECH_TIMEOUT,SpeechRecognizer.ERROR_NO_MATCH)){interrupt("El servicio local interrumpió la sesión (código $error)");return}
                     fail(when(error){
-                    SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED,SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE->"El servicio local no tiene español instalado. Descarga el idioma antes de escuchar."
+                    SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED,SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE->"El servicio local no tiene el idioma seleccionado instalado. Descárgalo en Ajustes."
                     SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS->"Revisa el permiso del micrófono."
                     else->"Reconocimiento local detenido (código $error). No se reiniciará automáticamente ni se usará la nube."
                 })}
             })
             sessionStarts++
-            recognizer!!.startListening(sessionIntent(checkNotNull(readEnd)))
+            recognizer!!.startListening(sessionIntent(checkNotNull(readEnd),language))
             if(audioSource==null){
                 val minimum=AudioRecord.getMinBufferSize(16000,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT)
                 check(minimum>0){"Formato de micrófono no disponible"}
@@ -120,9 +120,9 @@ internal class SystemSpeech(private val context:Context,private val onText:(Long
         if(pending.isNotBlank())onText(lineId,pending,true)
     }
     companion object{
-        internal fun sessionIntent(source:ParcelFileDescriptor)=Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+        internal fun sessionIntent(source:ParcelFileDescriptor,language:String=DEFAULT_SPEECH_LANGUAGE)=Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            .putExtra(RecognizerIntent.EXTRA_LANGUAGE,"es-ES")
+            .putExtra(RecognizerIntent.EXTRA_LANGUAGE,language)
             .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS,true)
             .putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE,true)
             .putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE,source)

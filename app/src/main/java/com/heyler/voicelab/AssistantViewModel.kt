@@ -19,7 +19,7 @@ import java.util.UUID
 // Speaker names are user assigned labels, never inferred identities.
 data class SpeechLine(val id:Long,val text:String,val final:Boolean,val revision:Int=1,val voice:String="Voz sin identificar",val edited:Boolean=false)
 data class LiveAnswer(val id:String,val source:Long?,val revision:Int,val question:String,val text:String="",val status:String="En espera",val firstTextMs:Double?=null)
-data class AssistantState(val speechEngine:String="moonshine",val transcriptionOnly:Boolean=false,val conversationTitle:String="",val conversationKey:Long=0,val listening:Boolean=false,val organizationRevision:Int=0,val audioSource:String="mic",val starting:Boolean=false,val history:List<ConversationEntry> = emptyList(),val preparing:Boolean=false,val generating:Boolean=false,val status:String="Listo. El micrófono está apagado.",val models:String="",val lines:List<SpeechLine> = emptyList(),val answers:List<LiveAnswer> = emptyList(),val summary:String="",val highlights:List<String> = emptyList(),val autoAnswers:Boolean=true,val autoSummary:Boolean=true,val voiceLabels:Boolean=false,val saved:List<SavedItem> = emptyList(),val audioLevel:Float=0f,val languageReady:Boolean=false)
+data class AssistantState(val speechEngine:String="moonshine",val transcriptionOnly:Boolean=false,val conversationTitle:String="",val conversationKey:Long=0,val listening:Boolean=false,val organizationRevision:Int=0,val audioSource:String="mic",val starting:Boolean=false,val history:List<ConversationEntry> = emptyList(),val preparing:Boolean=false,val generating:Boolean=false,val status:String="Listo. El micrófono está apagado.",val models:String="",val lines:List<SpeechLine> = emptyList(),val answers:List<LiveAnswer> = emptyList(),val summary:String="",val highlights:List<String> = emptyList(),val autoAnswers:Boolean=true,val autoSummary:Boolean=true,val voiceLabels:Boolean=false,val saved:List<SavedItem> = emptyList(),val audioLevel:Float=0f,val languageReady:Boolean=false,val speechLanguage:String=DEFAULT_SPEECH_LANGUAGE,val localSpeechModels:LocalSpeechModelState=LocalSpeechModelState())
 private data class Work(val id:String,val source:Long?,val revision:Int,val question:String,val context:String,val summary:Boolean=false,val epoch:Long,val queuedNanos:Long=SystemClock.elapsedRealtimeNanos())
 
 class AssistantViewModel(app:Application):AndroidViewModel(app){
@@ -38,7 +38,10 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
     private var speechRecoveries=0
     private var speechWarm:Job?=null
     private val preferences=context.getSharedPreferences("assistant-options",0)
-    val state=MutableStateFlow(AssistantState(speechEngine=preferences.getString("speech-engine","moonshine")?:"moonshine",transcriptionOnly=preferences.getBoolean("transcription-only",false),audioSource=preferences.getString("audio-source","mic")?:"mic",autoAnswers=preferences.getBoolean("answers",true),autoSummary=preferences.getBoolean("summary",true),voiceLabels=preferences.getBoolean("labels",false)))
+    val state=MutableStateFlow(AssistantState(speechEngine=preferences.getString("speech-engine","moonshine")?:"moonshine",speechLanguage=preferences.getString("speech-language",DEFAULT_SPEECH_LANGUAGE)?:DEFAULT_SPEECH_LANGUAGE,transcriptionOnly=preferences.getBoolean("transcription-only",false),audioSource=preferences.getString("audio-source","mic")?:"mic",autoAnswers=preferences.getBoolean("answers",true),autoSummary=preferences.getBoolean("summary",true),voiceLabels=preferences.getBoolean("labels",false)))
+    private val localModels=LocalSpeechModels(context)
+    private var localModelsJob:Job?=null
+    private var spanishChecked=false
     private val modelLock=Mutex()
     private val queue=Channel<Work>(8)
     private val summaries=Channel<Work>(Channel.CONFLATED)
@@ -177,6 +180,7 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
         if(rememberConversation)return
         synchronized(historyLock){sessionId=preferences.getLong("session-id",System.currentTimeMillis());preferences.edit().putLong("session-id",sessionId).apply();val saved=conversations.load(sessionId);if(saved!=null)state.update{it.copy(conversationTitle=saved.conversationTitle,conversationKey=sessionId,lines=saved.lines,answers=saved.answers,summary=saved.summary,highlights=ConversationRules.salient(saved.lines.joinToString(" "){l->l.text}))}else state.update{it.copy(lines=emptyList(),answers=emptyList(),summary="",highlights=emptyList())};rememberConversation=true;state.update{it.copy(history=conversations.list())}}
         prepareSpeech()
+        if(!spanishChecked){spanishChecked=true;refreshSpeechLanguages(autoSpanish=true)}
     }
     internal fun temporaryConversation(){synchronized(historyLock){rememberConversation=false};clearSession(keepHistory=true)}
     fun prepareSpeech(){if(state.value.speechEngine!="moonshine")return;if(speechWarm?.isActive==true||engines.speech!=null)return;speechWarm=viewModelScope.launch(Dispatchers.IO){try{modelLock.withLock{engines.loadSpeech()}}catch(_:Throwable){}}}
@@ -215,6 +219,44 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
     fun newConversation(){switchConversation(null)}
     fun openConversation(id:Long){switchConversation(id)}
     fun renameConversation(title:String){state.update{it.copy(conversationTitle=title.trim().take(100))};if(rememberConversation)persistConversation()}
+    fun renameConversation(id:Long,title:String){
+        if(title.isBlank())return
+        if(id==sessionId||id==state.value.conversationKey)renameConversation(title)
+        else synchronized(historyLock){conversations.rename(id,title.trim().take(100));state.update{it.copy(history=conversations.list())}}
+    }
+    fun setSpeechLanguage(language:String){
+        require(language in state.value.localSpeechModels.languages())
+        pause();preferences.edit().putString("speech-language",language).apply();state.update{it.copy(speechLanguage=language)}
+        refreshSpeechLanguages()
+    }
+    fun refreshSpeechLanguages(autoSpanish:Boolean=false){
+        if(localModelsJob?.isActive==true||state.value.listening||state.value.starting)return
+        localModelsJob=viewModelScope.launch{
+            state.update{it.copy(localSpeechModels=it.localSpeechModels.copy(checking=true,message="Comprobando idiomas…"))}
+            try{
+                val report=localModels.inspect(if(autoSpanish)DEFAULT_SPEECH_LANGUAGE else state.value.speechLanguage)
+                state.update{it.copy(localSpeechModels=report)}
+                if(autoSpanish){
+                    val spanish=report.spanishLanguage()
+                    if(spanish!=null&&state.value.speechLanguage==DEFAULT_SPEECH_LANGUAGE&&spanish!=DEFAULT_SPEECH_LANGUAGE){preferences.edit().putString("speech-language",spanish).apply();state.update{it.copy(speechLanguage=spanish)}}
+                    if(report.needsSpanish()&&spanish!=null)downloadLocalLanguage(spanish)
+                }
+            }catch(e:CancellationException){throw e}catch(e:Throwable){state.update{it.copy(localSpeechModels=it.localSpeechModels.copy(checking=false,downloading=false,message="No se pudo comprobar el servicio local."))}}
+        }
+    }
+    fun downloadSpeechLanguage(){
+        if(localModelsJob?.isActive==true||state.value.listening||state.value.starting)return
+        localModelsJob=viewModelScope.launch{downloadLocalLanguage(state.value.speechLanguage)}
+    }
+    private suspend fun downloadLocalLanguage(language:String){
+        if(state.value.localSpeechModels.hasLanguage(language))return
+        state.update{it.copy(localSpeechModels=it.localSpeechModels.copy(checking=false,downloading=true,progress=null,message="Descargando ${languageName(language)}…"))}
+        try{
+            val message=localModels.download(language){progress->state.update{it.copy(localSpeechModels=it.localSpeechModels.copy(progress=progress))}}
+            val report=localModels.inspect(state.value.speechLanguage)
+            state.update{it.copy(localSpeechModels=report.copy(message=if(report.hasLanguage(language))"${languageName(language)} listo sin conexión"else message))}
+        }catch(e:CancellationException){throw e}catch(e:Throwable){state.update{it.copy(localSpeechModels=it.localSpeechModels.copy(downloading=false,progress=null,message="No se pudo descargar el idioma. Reintenta con conexión."))}}
+    }
     fun deleteConversation(id:Long){if(id==sessionId)clearSession()else synchronized(historyLock){conversations.delete(id)};state.update{it.copy(history=conversations.list())}}
 
     fun clearSession(keepHistory:Boolean=false){suspendSession();epoch++;debounce.values.forEach{it.cancel()};debounce.clear();signatures.clear();state.update{it.copy(conversationTitle="",conversationKey=System.nanoTime(),organizationRevision=0,lines=emptyList(),answers=emptyList(),summary="",highlights=emptyList(),status="Sesión borrada. Los textos guardados se conservan.")};if(rememberConversation&&!keepHistory)synchronized(historyLock){conversations.delete(sessionId)};state.update{it.copy(history=conversations.list())}}
@@ -246,13 +288,14 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
     private fun startListening(projection:android.media.projection.MediaProjection?,audioSource:android.os.ParcelFileDescriptor?,recovering:Boolean=false){
         if(conversationSwitch?.isActive==true||state.value.starting||state.value.listening||capture?.isActive==true||importJob?.isActive==true)return
         if(projection==null&&state.value.speechEngine=="system"){
+            if(state.value.localSpeechModels.downloading||state.value.localSpeechModels.checking){state.update{it.copy(status="Espera a que termine la preparación del idioma.")};return}
             if(!recovering)speechRecoveries=0
             state.update{it.copy(starting=true,status="Preparando reconocimiento local de Android…")}
             val captureEpoch=epoch
             val sessionToken=++speechSessionToken
             capture=viewModelScope.launch{try{closingSystemSpeech?.awaitStopped();closingSystemSpeech=null;if(state.value.transcriptionOnly){stopResponse();warming?.cancelAndJoin();generation?.join();modelLock.withLock{engines.unloadLanguage();state.update{it.copy(languageReady=false)}}};speechWarm?.join();modelLock.withLock{engines.unloadSpeech()}
                 systemSpeech=SystemSpeech(context,{id,text,final->if(epoch==captureEpoch && sessionToken==speechSessionToken)observe(id,text,final,captureEpoch)},{if(sessionToken==speechSessionToken)state.update{it.copy(starting=false,listening=true,status="Escuchando · Android local continuo")}},{message->if(sessionToken==speechSessionToken)state.update{it.copy(starting=false,listening=false,audioLevel=0f,status=message)}},{message->recoverSystemSpeech(message,sessionToken)},{level->if(sessionToken==speechSessionToken)state.update{it.copy(audioLevel=level)}})
-                currentCoroutineContext().ensureActive();systemSpeech?.start(audioSource)
+                currentCoroutineContext().ensureActive();systemSpeech?.start(audioSource,state.value.speechLanguage)
             }catch(e:CancellationException){throw e}catch(e:Throwable){state.update{it.copy(starting=false,listening=false,status="No se pudo preparar el reconocimiento local: ${e.message}")}}};return
         }
         state.update{it.copy(starting=true,status="Preparando modelo de voz; aún no se está grabando…")}
@@ -315,5 +358,5 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
     fun delete(id:Long){store.delete(id);reloadSaved()}
     fun done(id:Long,value:Boolean){store.done(id,value);reloadSaved()}
     fun releaseModels(after:()->Unit){suspendSession();viewModelScope.launch{capture?.join();generation?.join();withContext(Dispatchers.IO){modelLock.withLock{engines.close();state.update{it.copy(languageReady=false)}}};after()}}
-    override fun onCleared(){suspendSession();queue.close();summaries.close();val c=capture;val g=generation;CoroutineScope(Dispatchers.IO).launch{c?.join();g?.join();modelLock.withLock{engines.close()};store.close();synchronized(historyLock){conversations.close()}};super.onCleared()}
+    override fun onCleared(){localModelsJob?.cancel();suspendSession();queue.close();summaries.close();val c=capture;val g=generation;CoroutineScope(Dispatchers.IO).launch{c?.join();g?.join();modelLock.withLock{engines.close()};store.close();synchronized(historyLock){conversations.close()}};super.onCleared()}
 }

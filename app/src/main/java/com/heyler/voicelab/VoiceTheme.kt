@@ -69,8 +69,8 @@ private val VoiceColors=darkColorScheme(
         ChatCircleAction("Abrir historial de chats","menu",onMenu)
         Surface(color=Color(0xFF222735),shape=RoundedCornerShape(50),modifier=Modifier.weight(1f)){
             Row(Modifier.padding(4.dp),verticalAlignment=Alignment.CenterVertically){
-                listOf("Texto","Preguntas","Mapa").forEachIndexed{i,label->
-                    Box(Modifier.weight(if(i==1)1.35f else 1f).height(40.dp).background(if(selected==i)Color(0xFF39304F)else Color.Transparent,RoundedCornerShape(50)).clickable{onSelect(i)}.semantics{this.selected=selected==i;role=Role.Tab},contentAlignment=Alignment.Center){
+                listOf("Texto","Preguntas","Resumen").forEachIndexed{i,label->
+                    Box(Modifier.weight(if(i==1||i==2)1.35f else 1f).height(40.dp).background(if(selected==i)Color(0xFF39304F)else Color.Transparent,RoundedCornerShape(50)).clickable{onSelect(i)}.semantics{this.selected=selected==i;role=Role.Tab},contentAlignment=Alignment.Center){
                         Text(label,color=if(selected==i)VoiceAccent else MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.labelMedium,fontWeight=if(selected==i)FontWeight.SemiBold else FontWeight.Normal,maxLines=1)
                     }
                 }

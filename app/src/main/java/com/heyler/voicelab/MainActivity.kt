@@ -82,15 +82,26 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
     var librarySection by remember{mutableIntStateOf(0)}
     var search by remember{mutableStateOf("")}
     val compact=LocalConfiguration.current.screenHeightDp<480
+    val appContext=androidx.compose.ui.platform.LocalContext.current
     val keyboard=LocalSoftwareKeyboardController.current
     val drawer=rememberDrawerState(if(initialDrawer)DrawerValue.Open else DrawerValue.Closed)
     val scope=rememberCoroutineScope()
     var naming by remember{mutableStateOf(false)}
+    var namingId by remember{mutableStateOf<Long?>(null)}
+    var deletingId by remember{mutableStateOf<Long?>(null)}
+    var choosingLanguage by remember{mutableStateOf(false)}
     var nameDraft by remember{mutableStateOf("")}
     LaunchedEffect(s.organizationRevision){if(s.organizationRevision>0)liveSection=2}
-    if(naming)AlertDialog(onDismissRequest={naming=false},title={Text("Nombre del chat")},text={OutlinedTextField(nameDraft,{nameDraft=it},label={Text("Ej. Física · clase de eclipses")},singleLine=true)},confirmButton={TextButton(onClick={vm.renameConversation(nameDraft);naming=false}){Text("Guardar")}},dismissButton={TextButton(onClick={naming=false}){Text("Cancelar")}})
+    if(naming)AlertDialog(onDismissRequest={naming=false},title={Text("Nombre del chat")},text={OutlinedTextField(nameDraft,{nameDraft=it},label={Text("Ej. Física · clase de eclipses")},singleLine=true)},confirmButton={TextButton(onClick={namingId?.let{vm.renameConversation(it,nameDraft)}?:vm.renameConversation(nameDraft);naming=false}){Text("Guardar")}},dismissButton={TextButton(onClick={naming=false}){Text("Cancelar")}})
+    deletingId?.let{id->AlertDialog(onDismissRequest={deletingId=null},title={Text("¿Eliminar conversación?")},text={Text("Se borrarán su transcripción, respuestas y resumen guardados.")},confirmButton={TextButton(onClick={vm.deleteConversation(id);deletingId=null}){Text("Eliminar",color=MaterialTheme.colorScheme.error)}},dismissButton={TextButton(onClick={deletingId=null}){Text("Cancelar")}})}
+    if(choosingLanguage)AlertDialog(onDismissRequest={choosingLanguage=false},title={Text("Idioma de transcripción")},text={Column(Modifier.heightIn(max=360.dp).verticalScroll(rememberScrollState())){
+        s.localSpeechModels.languages().forEach{tag->TextButton(onClick={vm.setSpeechLanguage(tag);choosingLanguage=false},modifier=Modifier.fillMaxWidth()){
+            Text(languageName(tag),modifier=Modifier.weight(1f),color=if(s.speechLanguage==tag)VoiceAccent else MaterialTheme.colorScheme.onSurface)
+            Text(if(s.localSpeechModels.hasLanguage(tag))"Instalado"else "Descargar",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        }}
+    }},confirmButton={TextButton(onClick={choosingLanguage=false}){Text("Cerrar")}})
     ModalNavigationDrawer(drawerState=drawer,drawerContent={
-        ChatSidebar(s,tab,{scope.launch{drawer.close()}},{vm.newConversation();tab=0;liveSection=0;scope.launch{drawer.close()}},{id->vm.openConversation(id);tab=0;liveSection=2;scope.launch{drawer.close()}},{librarySection=1;tab=1;scope.launch{drawer.close()}},{tab=2;scope.launch{drawer.close()}})
+        ChatSidebar(s,tab,{scope.launch{drawer.close()}},{vm.newConversation();tab=0;liveSection=0;scope.launch{drawer.close()}},{id->vm.openConversation(id);tab=0;liveSection=2;scope.launch{drawer.close()}},{librarySection=1;tab=1;scope.launch{drawer.close()}},{tab=2;scope.launch{drawer.close()}},onRename={id,title->namingId=id;nameDraft=title;naming=true},onDelete={deletingId=it},onRenameCurrent={namingId=null;nameDraft=s.conversationTitle.ifBlank{if(s.lines.isEmpty())"Nueva conversación"else KnowledgeOrganizer.build(s.lines).topic};naming=true})
     }){
     Scaffold(containerColor=VoiceBackground,
         topBar={
@@ -100,12 +111,7 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
                     ChatCircleAction("Abrir historial de chats","menu"){scope.launch{drawer.open()}}
                     Spacer(Modifier.width(12.dp));VoiceHeader(s.listening,true,s.starting)
                 }
-                if(tab==0)Row(Modifier.fillMaxWidth().padding(horizontal=20.dp,vertical=4.dp),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){
-                    TextButton(onClick={nameDraft=s.conversationTitle.ifBlank{KnowledgeOrganizer.build(s.lines).topic};naming=true},modifier=Modifier.weight(1f),contentPadding=PaddingValues(horizontal=8.dp,vertical=0.dp)){
-                        Text(s.conversationTitle.ifBlank{if(s.lines.isEmpty())"Nueva conversación"else KnowledgeOrganizer.build(s.lines).topic},maxLines=1,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis,color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.labelLarge)
-                        Spacer(Modifier.width(6.dp));VoiceGlyph("chevron",MaterialTheme.colorScheme.onSurfaceVariant,Modifier.size(12.dp))
-                    }
-                }
+
             }
         },
         bottomBar={if(tab==0)ChatVoiceComposer(s.listening,s.starting,s.audioLevel,!s.preparing,{if(s.listening||s.starting){if(s.listening)liveSection=2;vm.pause()}else {liveSection=0;listen()}},question,{question=it},{if(question.isNotBlank()&&!s.preparing){vm.ask(question.trim());sentAnswerId=vm.state.value.answers.lastOrNull()?.id;question="";liveSection=0;keyboard?.hide()}})}
@@ -121,7 +127,7 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
                         if(librarySection==0){
                         Button(onClick={vm.newConversation();liveSection=0;tab=0}){Text("Nueva conversación")}
                         OutlinedTextField(search,{search=it},label={Text("Buscar una clase o conversación")},modifier=Modifier.fillMaxWidth(),singleLine=true)
-                        s.history.filter{search.isBlank()||it.title.contains(search,true)}.forEach{entry->Card(onClick={vm.openConversation(entry.id);liveSection=2;tab=0},modifier=Modifier.fillMaxWidth(),colors=CardDefaults.cardColors(containerColor=androidx.compose.ui.graphics.Color(0xFF171D2A)),shape=androidx.compose.foundation.shape.RoundedCornerShape(24.dp)){Column(Modifier.padding(12.dp)){Text(entry.title,style=MaterialTheme.typography.titleMedium);Text("${entry.fragments} fragmentos · ${entry.questions} preguntas · Mapa",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant);Text(java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM,java.text.DateFormat.SHORT).format(java.util.Date(entry.updated)),style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant);Row{TextButton(onClick={vm.openConversation(entry.id);liveSection=2;tab=0}){Text("Abrir")};TextButton(onClick={vm.deleteConversation(entry.id)}){Text("Borrar")}}}}}
+                        s.history.filter{search.isBlank()||it.title.contains(search,true)}.forEach{entry->Card(onClick={vm.openConversation(entry.id);liveSection=2;tab=0},modifier=Modifier.fillMaxWidth(),colors=CardDefaults.cardColors(containerColor=androidx.compose.ui.graphics.Color(0xFF171D2A)),shape=androidx.compose.foundation.shape.RoundedCornerShape(24.dp)){Column(Modifier.padding(12.dp)){Text(entry.title,style=MaterialTheme.typography.titleMedium);Text("${entry.fragments} fragmentos · ${entry.questions} preguntas · Resumen",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant);Text(java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM,java.text.DateFormat.SHORT).format(java.util.Date(entry.updated)),style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant);Row{TextButton(onClick={vm.openConversation(entry.id);liveSection=2;tab=0}){Text("Abrir")};TextButton(onClick={vm.deleteConversation(entry.id)}){Text("Borrar")}}}}}
                         if(s.history.isEmpty())DesignPanel("Tu próxima conversación"){Text("Cuando empieces a escuchar, encontrarás aquí el historial.",color=MaterialTheme.colorScheme.onSurfaceVariant)}
                         }else{
                         Text("Textos que elegiste guardar",style=MaterialTheme.typography.titleLarge)
@@ -146,8 +152,27 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
                         }
                     }
                     2->{
-                        Text("A tu manera",style=MaterialTheme.typography.headlineSmall,fontWeight=androidx.compose.ui.text.font.FontWeight.SemiBold)
-                        Text("Personaliza cómo escucha y te ayuda V.",color=MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Ajustes",style=MaterialTheme.typography.headlineSmall,fontWeight=androidx.compose.ui.text.font.FontWeight.SemiBold)
+                        DesignPanel("Idiomas · Android local"){
+                            Text("Español se descarga automáticamente si está disponible. La primera descarga necesita conexión.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                            val models=s.localSpeechModels
+                            val managing=models.downloading||models.checking
+                            TextButton(onClick={choosingLanguage=true},enabled=!managing&&!s.listening&&!s.starting,contentPadding=PaddingValues(0.dp)){
+                                Text(languageName(s.speechLanguage),modifier=Modifier.weight(1f),color=MaterialTheme.colorScheme.onSurface)
+                                Text("Cambiar",color=VoiceAccent)
+                            }
+                            Text(if(models.hasLanguage(s.speechLanguage))"Idioma listo sin conexión"else models.message,style=MaterialTheme.typography.bodySmall,color=if(models.hasLanguage(s.speechLanguage))VoiceGreen else MaterialTheme.colorScheme.onSurfaceVariant)
+                            if(models.downloading){if(models.progress!=null){LinearProgressIndicator(progress={models.progress/100f},modifier=Modifier.fillMaxWidth());Text("${models.progress} %",style=MaterialTheme.typography.labelSmall)}else LinearProgressIndicator(Modifier.fillMaxWidth())}
+                            Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
+                                if(!models.hasLanguage(s.speechLanguage))TextButton(onClick=vm::downloadSpeechLanguage,enabled=models.available&&!managing&&!s.listening&&!s.starting){Text("Descargar idioma")}
+                                TextButton(onClick={vm.refreshSpeechLanguages()},enabled=!managing&&!s.listening&&!s.starting){Text("Comprobar idiomas")}
+                            }
+                            if(!models.available&&!models.checking)TextButton(onClick={
+                                val store=Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://play.google.com/store/apps/details?id=com.google.android.tts"))
+                                runCatching{appContext.startActivity(store)}.onFailure{vm.state.value=vm.state.value.copy(status="No se pudo abrir la tienda de aplicaciones.")}
+                            }){Text("Obtener servicios de voz de Google")}
+                            Text("Estos idiomas se usan con Android local. Moonshine mantiene su modelo español; Soniqo utiliza su propio modelo multilingüe.",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                         DesignPanel("Fuente de audio"){
                         Row{FilterChip(selected=s.audioSource=="mic",onClick={vm.setAudioSource("mic")},label={Text("Micrófono")});Spacer(Modifier.width(8.dp));FilterChip(selected=s.audioSource=="video",onClick={vm.setAudioSource("video")},label={Text("Audio del video")})}
                         Text("Captura el video del mismo teléfono sin usar el micrófono. Mantén ambas apps en pantalla dividida. Android solicitará permiso; algunas apps bloquean la captura.",style=MaterialTheme.typography.bodySmall)
@@ -177,7 +202,7 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
                         }
                     }
                 }
-                if(tab==2)Text("V · Android 0.17",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                if(tab==2)Text("V · Android 0.20",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -201,10 +226,9 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
 @Composable private fun Toggle(label:String,value:Boolean,change:(Boolean)->Unit){Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text(label,Modifier.weight(1f));Switch(value,change)}}
 
 @Composable private fun DesignPanel(title:String,content:@Composable ColumnScope.()->Unit){
-    Surface(color=androidx.compose.ui.graphics.Color(0xFF171D2A),shape=androidx.compose.foundation.shape.RoundedCornerShape(24.dp),modifier=Modifier.fillMaxWidth()){
-        Column(Modifier.padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
-            Text(title,style=MaterialTheme.typography.titleMedium,color=VoiceAccent)
-            content()
-        }
+    Column(Modifier.fillMaxWidth().padding(vertical=8.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){
+        Text(title,style=MaterialTheme.typography.titleMedium,color=VoiceAccent)
+        content()
+        HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant,modifier=Modifier.padding(top=8.dp))
     }
 }

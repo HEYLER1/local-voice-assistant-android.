@@ -1,5 +1,6 @@
 package com.heyler.voicelab
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -34,8 +35,8 @@ import androidx.compose.ui.unit.sp
     Column(modifier.fillMaxSize().verticalScroll(scroll).padding(horizontal=20.dp).padding(top=8.dp,bottom=24.dp),verticalArrangement=Arrangement.spacedBy(if(compact)8.dp else 18.dp)){
         if(s.generating)TextButton(onClick=onStop){Text("Detener respuesta")}
         if(s.starting)Text(s.status,color=VoiceAccent)
-        if(s.models.contains("importar"))Surface(color=Color(0xFF292139),shape=RoundedCornerShape(18.dp)){Column(Modifier.padding(16.dp)){Text("Prepara tu asistente",fontWeight=FontWeight.SemiBold);Text(s.models,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant);TextButton(onClick=onSettings){Text("Configurar modelos")}}}
-        if(s.status.startsWith("No se pudo")||s.status.startsWith("Permiso")||s.status.startsWith("Instala una voz"))Text(s.status,color=MaterialTheme.colorScheme.error)
+        if((s.speechEngine=="moonshine"&&s.models.contains("Voz: importar"))||(s.speechEngine=="soniqo"&&s.models.contains("Soniqo: importar"))||(!s.transcriptionOnly&&s.models.contains("Respuestas: importar")))Surface(color=Color.Transparent){Column(Modifier.padding(vertical=8.dp)){Text("Prepara tu asistente",fontWeight=FontWeight.SemiBold);Text(s.models,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant);TextButton(onClick=onSettings){Text("Configurar modelos")}}}
+        if(s.status.startsWith("No se pudo")||s.status.startsWith("Permiso")||s.status.startsWith("Instala una voz")||s.status.startsWith("Espera a"))Text(s.status,color=MaterialTheme.colorScheme.error)
         if(section==0&&s.lines.isEmpty()&&s.answers.isEmpty())EmptyConversation()
         else if(section==0)BoxWithConstraints(Modifier.fillMaxWidth()){
             val latest=selected
@@ -43,12 +44,11 @@ import androidx.compose.ui.unit.sp
                 Column(Modifier.weight(1f)){TranscriptPanel(s,onEdit,onSave,openAnswer)}
                 Column(Modifier.weight(1f)){if(latest!=null)AnswerPanel(latest,onSpeak,onSave)else WaitingForQuestion(s.autoAnswers)}
             }else Column(verticalArrangement=Arrangement.spacedBy(18.dp)){
-                if(latest!=null)Surface(onClick={openAnswer(latest.id)},color=Color(0xFF211D34),shape=RoundedCornerShape(22.dp),modifier=Modifier.fillMaxWidth()){
-                    Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
+                if(latest!=null)Column(Modifier.fillMaxWidth().clickable{openAnswer(latest.id)}.padding(vertical=8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
                         Row{Text("RESPUESTA EN VIVO",style=MaterialTheme.typography.labelSmall,color=VoiceAccent,modifier=Modifier.weight(1f));Text("Abrir →",style=MaterialTheme.typography.labelSmall,color=VoiceAccent)}
                         Text(latest.question,maxLines=2,overflow=TextOverflow.Ellipsis,fontWeight=FontWeight.SemiBold)
                         Text(ReadableAnswer.format(latest.text).ifBlank{latest.status},maxLines=3,overflow=TextOverflow.Ellipsis,color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.bodyMedium)
-                    }
+                    HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant,modifier=Modifier.padding(top=8.dp))
                 }
                 TranscriptPanel(s,onEdit,onSave,openAnswer)
                 if(latest==null)WaitingForQuestion(s.autoAnswers)
@@ -65,10 +65,9 @@ import androidx.compose.ui.unit.sp
         }
         if(section==1&&s.answers.isEmpty())WaitingForQuestion(s.autoAnswers)
         if(section==2&&s.lines.isNotEmpty()){
-            KnowledgeMapPanel(s,openAnswer,onEdit,onSave,onSummary)
-            TextButton(onClick=onClear,modifier=Modifier.align(Alignment.CenterHorizontally)){Text("Borrar esta sesión",color=MaterialTheme.colorScheme.onSurfaceVariant)}
+            StudySummaryPanel(s,openAnswer,onEdit,onSave,onSummary)
         }
-        if(section==2&&s.lines.isEmpty())Text("Cuando empieces a hablar, reuniré aquí las ideas principales.",color=MaterialTheme.colorScheme.onSurfaceVariant)
+        if(section==2&&s.lines.isEmpty())Text("Graba tu clase para reunir aquí el resumen y los apuntes de estudio.",color=MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 @Composable private fun EmptyConversation(){
@@ -78,14 +77,14 @@ import androidx.compose.ui.unit.sp
         Text("Habla o escribe. V reúne tus ideas.",style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
-@Composable private fun WaitingForQuestion(enabled:Boolean){Surface(color=Color(0xFF18162A),shape=RoundedCornerShape(20.dp),modifier=Modifier.fillMaxWidth()){Row(Modifier.padding(16.dp),verticalAlignment=Alignment.CenterVertically){VoiceGlyph("spark",VoiceAccent,Modifier.size(20.dp));Spacer(Modifier.width(12.dp));Text(if(enabled)"Escucharé las preguntas relevantes y las responderé aquí."else "Las respuestas del audio están desactivadas en Ajustes.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}}}
+@Composable private fun WaitingForQuestion(enabled:Boolean){Text(if(enabled)"Las preguntas relevantes aparecerán aquí."else "Las respuestas del audio están desactivadas en Ajustes.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(vertical=8.dp))}
 @Composable private fun TranscriptPanel(s:AssistantState,onEdit:(SpeechLine)->Unit,onSave:(String,String)->Unit,onAnswer:(String)->Unit){
     var editing by remember{mutableStateOf(false)}
     var follow by remember{mutableStateOf(true)}
     val textScroll=rememberScrollState()
     val literal=s.lines.joinToString(" "){it.text}
     LaunchedEffect(literal,follow){if(follow)textScroll.animateScrollTo(textScroll.maxValue)}
-    Surface(color=Color(0xFF151B28),shape=RoundedCornerShape(24.dp),modifier=Modifier.fillMaxWidth().border(1.dp,Color(0xFF293245),RoundedCornerShape(24.dp))){Column(Modifier.padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
+    Column(Modifier.fillMaxWidth().padding(vertical=8.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){
         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Transcripción",fontWeight=FontWeight.SemiBold,modifier=Modifier.weight(1f));Text(if(s.listening)"● EN VIVO"else "PAUSADA",style=MaterialTheme.typography.labelSmall,color=if(s.listening)VoiceGreen else MaterialTheme.colorScheme.onSurfaceVariant)}
         Column(Modifier.heightIn(max=420.dp).verticalScroll(textScroll)){
             if(s.voiceLabels)s.lines.forEach{line->Text(line.voice,style=MaterialTheme.typography.labelMedium,color=VoiceAccent);SelectionContainer{Text(linkedTranscript(line.text,s.answers,onAnswer),lineHeight=26.sp,fontSize=16.sp)};Spacer(Modifier.height(12.dp))}
@@ -94,12 +93,12 @@ import androidx.compose.ui.unit.sp
         if(NumericMentions.spans(literal).isNotEmpty())Text("Cifras resaltadas · compruébalas con el audio",style=MaterialTheme.typography.labelSmall,color=Color(0xFFEBC189))
         Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){TextButton(onClick={editing=!editing},contentPadding=PaddingValues(0.dp)){Text(if(editing)"Cerrar edición"else "Editar / guardar")};TextButton(onClick={follow=!follow},contentPadding=PaddingValues(0.dp)){Text(if(follow)"Siguiendo audio"else "Seguir audio",color=MaterialTheme.colorScheme.onSurfaceVariant)}}
         if(editing)Column(Modifier.heightIn(max=300.dp).verticalScroll(rememberScrollState())){s.lines.forEach{line->Text(line.text,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant);Row{TextButton(onClick={onEdit(line)}){Text("Editar")};TextButton(onClick={onSave(line.text,"Transcripción seleccionada por usuario")}){Text("Guardar")}}}}
-    }}
+    }
 }
 @Composable private fun AnswerPanel(a:LiveAnswer,onSpeak:(String)->Unit,onSave:(String,String)->Unit){
     val compact=LocalConfiguration.current.screenHeightDp<480
     val active=a.status=="En espera"||a.status.startsWith("Preparando")||a.status.startsWith("Respondiendo")
-    Surface(color=Color(0xFF211D34),shape=RoundedCornerShape(24.dp),modifier=Modifier.fillMaxWidth().border(1.dp,Color(0xFF49376B),RoundedCornerShape(24.dp))){Column(Modifier.padding(if(compact)14.dp else 20.dp),verticalArrangement=Arrangement.spacedBy(if(compact)8.dp else 12.dp)){
+    Column(Modifier.fillMaxWidth().padding(vertical=8.dp),verticalArrangement=Arrangement.spacedBy(if(compact)8.dp else 12.dp)){
         Row(verticalAlignment=Alignment.CenterVertically){VoiceGlyph("spark",VoiceAccent,Modifier.size(18.dp));Spacer(Modifier.width(8.dp));Text(if(a.source==null)"TU CONSULTA"else "PREGUNTA DEL AUDIO",color=VoiceAccent,style=MaterialTheme.typography.labelSmall,fontWeight=FontWeight.Bold);Spacer(Modifier.weight(1f));if(active)CircularProgressIndicator(Modifier.size(16.dp),strokeWidth=2.dp,color=VoiceAccent)}
         Text(a.question,fontWeight=FontWeight.SemiBold,fontSize=if(compact)16.sp else 18.sp,lineHeight=if(compact)22.sp else 25.sp,maxLines=if(compact)2 else 4,overflow=TextOverflow.Ellipsis)
         if(a.text.isNotBlank())SelectionContainer{Text(ReadableAnswer.format(a.text),lineHeight=if(compact)22.sp else 26.sp,fontSize=if(compact)15.sp else 16.sp,color=Color(0xFFE6E0F4))}
@@ -108,9 +107,9 @@ import androidx.compose.ui.unit.sp
             if(active)Text("Respondiendo en vivo…",color=VoiceAccent,style=MaterialTheme.typography.labelSmall)
             else Text(if(a.status.startsWith("Lista"))"Respuesta local · sin verificación externa"else a.status,style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             a.firstTextMs?.let{Text("Primer texto · %.1f s".format(it/1000),style=MaterialTheme.typography.labelSmall,color=VoiceAccent)}
-            Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){OutlinedButton(onClick={onSpeak(a.text)},contentPadding=PaddingValues(horizontal=14.dp,vertical=6.dp)){Text("Escuchar")};TextButton(onClick={onSave(a.text,"Respuesta local, revisar antes de guardar")}){Text("Guardar")}}
+            Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){TextButton(onClick={onSpeak(a.text)},contentPadding=PaddingValues(horizontal=0.dp,vertical=6.dp)){Text("Escuchar")};TextButton(onClick={onSave(a.text,"Respuesta local, revisar antes de guardar")}){Text("Guardar")}}
         }
-    }}
+    }
 }
 
 private fun linkedTranscript(text:String,answers:List<LiveAnswer>,open:(String)->Unit):AnnotatedString = buildAnnotatedString {
@@ -130,12 +129,13 @@ private fun linkedTranscript(text:String,answers:List<LiveAnswer>,open:(String)-
 }
 
 @Composable private fun QuestionList(answers:List<LiveAnswer>,selected:String?,open:(String)->Unit){
-    Column(Modifier.heightIn(max=190.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(8.dp)){
-        answers.forEachIndexed{index,a->Surface(onClick={open(a.id)},color=if(a.id==selected)Color(0xFF2B2340)else Color(0xFF171D2A),shape=RoundedCornerShape(18.dp),modifier=Modifier.fillMaxWidth()){
-            Row(Modifier.padding(14.dp),horizontalArrangement=Arrangement.spacedBy(12.dp)){
+    Column(Modifier.heightIn(max=190.dp).verticalScroll(rememberScrollState())){
+        answers.forEachIndexed{index,a->
+            Row(Modifier.fillMaxWidth().clickable{open(a.id)}.padding(vertical=10.dp),horizontalArrangement=Arrangement.spacedBy(12.dp)){
                 Text("${index+1}",style=MaterialTheme.typography.labelLarge,color=VoiceAccent)
-                Column{Text(a.question,maxLines=2,overflow=TextOverflow.Ellipsis,style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurface);Text(a.status.substringBefore("·").trim(),style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant,maxLines=1,overflow=TextOverflow.Ellipsis)}
+                Column(Modifier.weight(1f)){Text(a.question,maxLines=2,overflow=TextOverflow.Ellipsis,style=MaterialTheme.typography.bodyMedium,color=if(a.id==selected)VoiceAccent else MaterialTheme.colorScheme.onSurface);Text(a.status.substringBefore("·").trim(),style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant,maxLines=1,overflow=TextOverflow.Ellipsis)}
             }
-        }}
+            HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant)
+        }
     }
 }

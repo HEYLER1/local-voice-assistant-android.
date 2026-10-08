@@ -24,5 +24,11 @@ class ConversationStore(context:Context):SQLiteOpenHelper(context,"conversations
         val data=JSONObject(c.getString(0));val lines=data.getJSONArray("lines");val answers=data.getJSONArray("answers")
         AssistantState(conversationTitle=data.optString("name"),lines=List(lines.length()){i->val l=lines.getJSONObject(i);SpeechLine(l.getLong("id"),l.getString("text"),true,l.getInt("revision"),l.getString("voice"),true)},answers=List(answers.length()){i->val a=answers.getJSONObject(i);val status=a.getString("status");LiveAnswer(a.getString("id"),if(a.isNull("source"))null else a.getLong("source"),a.getInt("revision"),a.getString("question"),a.getString("text"),if(status=="En espera"||status.startsWith("Preparando")||status.startsWith("Respondiendo"))"Interrumpida al cerrar; texto conservado"else status,if(a.isNull("first"))null else a.getDouble("first"))},summary=data.optString("summary"))
     }}
+    fun rename(id:Long,title:String){
+        val db=writableDatabase;db.beginTransaction()
+        try{db.rawQuery("SELECT data FROM sessions WHERE id=?",arrayOf(id.toString())).use{cursor->
+            if(cursor.moveToFirst()){val data=JSONObject(cursor.getString(0)).put("name",title);db.update("sessions",ContentValues().apply{put("title",title);put("data",data.toString())},"id=?",arrayOf(id.toString()))}
+        };db.setTransactionSuccessful()}finally{db.endTransaction()}
+    }
     fun delete(id:Long){writableDatabase.delete("sessions","id=?",arrayOf(id.toString()))}
 }

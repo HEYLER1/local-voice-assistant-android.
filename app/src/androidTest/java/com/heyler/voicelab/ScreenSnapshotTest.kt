@@ -41,12 +41,13 @@ class ScreenSnapshotTest {
     @Test fun modernChatWithSyntheticLayout(){
         instrumentation.startActivitySync(Intent(context,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         val activity=checkNotNull(current()) as MainActivity
+        val localModels=kotlinx.coroutines.runBlocking{LocalSpeechModels(context).inspect("es-ES")}
         var vm:AssistantViewModel?=null
         try{
             instrumentation.runOnMainSync{
                 vm=ViewModelProvider(activity)[AssistantViewModel::class.java]
                 checkNotNull(vm).temporaryConversation()
-                checkNotNull(vm).state.value=AssistantState(conversationKey=-17,models="Listos",history=emptyList())
+                checkNotNull(vm).state.value=AssistantState(conversationKey=-17,models="Listos",history=emptyList(),localSpeechModels=localModels)
                 activity.setContent{VoiceTheme{AssistantScreen(checkNotNull(vm),{}, {}, {}, {}, {}, {})}}
             }
             render(activity,"v-modern-empty-synthetic.png")
@@ -56,9 +57,18 @@ class ScreenSnapshotTest {
             render(activity,"v-modern-text-synthetic.png")
             instrumentation.runOnMainSync{activity.setContent{VoiceTheme{AssistantScreen(checkNotNull(vm),{}, {}, {}, {}, {}, {},initialSection=1)}}}
             render(activity,"v-modern-questions-synthetic.png")
+            instrumentation.runOnMainSync{activity.setContent{VoiceTheme{AssistantScreen(checkNotNull(vm),{}, {}, {}, {}, {}, {},initialTab=2)}}}
+            render(activity,"v-simple-settings-synthetic.png")
+            instrumentation.runOnMainSync{checkNotNull(vm).state.value=checkNotNull(vm).state.value.copy(conversationKey=-1801,history=listOf(ConversationEntry(-1801,"Astronomía · eclipses",System.currentTimeMillis(),1,1),ConversationEntry(-1802,"Cálculo · integrales",System.currentTimeMillis(),3,2),ConversationEntry(-1803,"Historia · Revolución industrial",System.currentTimeMillis()-86400000,4,2),ConversationEntry(-1804,"Biología · división celular",System.currentTimeMillis()-172800000,4,1)));activity.setContent{VoiceTheme{AssistantScreen(checkNotNull(vm),{}, {}, {}, {}, {}, {},initialDrawer=true)}}}
+            render(activity,"v-study-sidebar-synthetic.png")
             val example=checkNotNull(vm).state.value
             instrumentation.runOnMainSync{activity.setContent{VoiceTheme{AssistantScreen(checkNotNull(vm),{}, {}, {}, {}, {}, {},initialSection=2)}}}
             render(activity,"v-modern-map-synthetic.png")
+            instrumentation.runOnMainSync{
+                checkNotNull(vm).state.value=checkNotNull(vm).state.value.copy(summary="La clase explica cómo se produce un eclipse solar y describe las bandas de sombra como variaciones de luz cerca de la totalidad.",lines=listOf(SpeechLine(1901,"Un eclipse solar ocurre cuando la Luna pasa entre la Tierra y el Sol. Las bandas de sombra son franjas claras y oscuras que pueden observarse cerca de la totalidad.",true),SpeechLine(1902,"En el ejercicio la totalidad dura 45 segundos. El grupo anota sus observaciones antes de comparar las respuestas.",true)))
+                activity.setContent{VoiceTheme{AssistantScreen(checkNotNull(vm),{}, {}, {}, {}, {}, {},initialSection=2)}}
+            }
+            render(activity,"v-study-summary-synthetic.png")
             instrumentation.runOnMainSync{activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE}
             waitFor{val candidate=current();candidate!=null&&candidate.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE}
             val landscape=checkNotNull(current()) as MainActivity
