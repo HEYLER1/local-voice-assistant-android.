@@ -11,7 +11,7 @@ object ConversationRules {
     private val predicates=Regex("\\b(?:es|son|fue|sera|recibe|reciben|sabemos|sabia|causa|causan|ocurre|ocurren|funciona|funcionan|calcula|calcular|puede|puedo|significa|tiene|tienen|cambia|cambian|explica|explicar|hace|hacen|produce|producen|sucede|suceden|se)\\b")
     private val filler=setOf("que","por","como","cual","cuando","es","son","fue","se","el","la","los","las","un","una","de","del","en","y","a","no","esto","eso","asi","aqui","ahi","todo","algo","pero","raro","funciona","puede","puedo","calcula")
     fun questions(text:String)=spans(text).map{it.text}
-    fun spans(text:String):List<QuestionSpan>{
+    fun spans(text:String,allowContextual:Boolean=false):List<QuestionSpan>{
         val found=mutableListOf<QuestionSpan>()
         fun add(raw:String,start:Int){
             val boundary=narration.find(folded(raw))?.range?.first?:raw.length
@@ -27,12 +27,16 @@ object ConversationRules {
             found.add(QuestionSpan("¿$phrase?",start))
         }
         Regex("¿([^¿?]+)\\?").findAll(text).forEach{add(it.groupValues[1],it.range.first)}
+        if(allowContextual){
+            val short=Regex("¿(?:como (?:se (?:calcula|resuelve|aplica|demuestra)|funciona)(?: esto| eso)?|por que (?:ocurre|sucede|pasa)(?: esto| eso)?|que (?:significa|representa) (?:esto|eso))\\?")
+            short.findAll(folded(text)).forEach{match->found.add(QuestionSpan(text.substring(match.range),match.range.first))}
+        }
         cues.findAll(folded(text)).forEach{m->val tail=text.substring(m.range.first);add(tail.takeWhile{it !in "?.!¿"},m.range.first)}
         val accepted=found.distinctBy{key(it.text)}
         return accepted.filter{candidate->accepted.none{other->key(other.text)!=key(candidate.text)&&key(other.text).contains(key(candidate.text))}}.sortedBy{it.start}.takeLast(8)
     }
     fun salient(text:String):List<String> = text.split(Regex("(?<=[.!?])\\s+"))
         .map{it.trim()}.filter{key(it).split(" ").size>=8}
-        .sortedByDescending{sentence->Regex("\\b(?:decidi|acord|importante|porque|significa|consiste|ocurre|objetivo|resultado|eclipse|pregunta)").findAll(key(sentence)).count()}
+        .sortedByDescending{sentence->Regex("\\b(?:decidi|acord|importante|porque|significa|consiste|ocurre|objetivo|resultado|pregunta|tarea|trabajo|examen|evaluacion|definicion|ejercicio)").findAll(key(sentence)).count()}
         .distinctBy{key(it)}.take(4)
 }

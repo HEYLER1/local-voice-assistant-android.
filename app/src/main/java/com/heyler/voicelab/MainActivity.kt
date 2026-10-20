@@ -117,7 +117,7 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
         bottomBar={if(tab==0)ChatVoiceComposer(s.listening,s.starting,s.audioLevel,!s.preparing,{if(s.listening||s.starting){if(s.listening)liveSection=2;vm.pause()}else {liveSection=0;listen()}},question,{question=it},{if(question.isNotBlank()&&!s.preparing){vm.ask(question.trim());sentAnswerId=vm.state.value.answers.lastOrNull()?.id;question="";liveSection=0;keyboard?.hide()}})}
     ){padding->
         when(tab){
-            0->Column(Modifier.fillMaxSize().padding(padding)){key(s.conversationKey){LiveConversation(s,{editing=it},{text,source->draft=SaveDraft(text=text,source=source)},speak,vm::requestSummary,{vm.clearSession();stopVoice()},{vm.stopResponse();stopVoice()},{tab=2},Modifier.weight(1f),liveSection,{liveSection=it},preferredAnswerId=sentAnswerId)}}
+            0->Column(Modifier.fillMaxSize().padding(padding)){key(s.conversationKey){LiveConversation(s,{editing=it},{text,source->draft=SaveDraft(kind=if(source.startsWith("Tarea de clase"))"Tarea"else "Recuerdo",text=text,source=source)},speak,vm::requestSummary,{vm.clearSession();stopVoice()},{vm.stopResponse();stopVoice()},{tab=2},Modifier.weight(1f),liveSection,{liveSection=it},preferredAnswerId=sentAnswerId)}}
             else->Column(Modifier.fillMaxSize().padding(padding).imePadding().verticalScroll(rememberScrollState()).padding(horizontal=20.dp).padding(top=16.dp,bottom=28.dp),verticalArrangement=Arrangement.spacedBy(14.dp)){
                 when(tab){
                     1->{
@@ -153,6 +153,13 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
                     }
                     2->{
                         Text("Ajustes",style=MaterialTheme.typography.headlineSmall,fontWeight=androidx.compose.ui.text.font.FontWeight.SemiBold)
+                        DesignPanel("Respuestas online"){
+                            Toggle("Usar respuestas online",s.onlineAnswers,vm::setOnlineAnswers)
+                            Text(OnlineAssistant.NAME,style=MaterialTheme.typography.bodyMedium)
+                            Text("Sin registro ni clave. Necesita Internet. Se envían la pregunta, fragmentos seleccionados de la clase y hasta tres respuestas previas de este chat para mantener el contexto. No se envían audio ni textos de tu biblioteca.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("El acceso gratuito tiene límites y depende de la disponibilidad de Pollinations. No se cambia a otro proveedor si falla.",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                            TextButton(onClick={appContext.startActivity(Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://enter.pollinations.ai/privacy")))},contentPadding=PaddingValues(0.dp)){Text("Privacidad de Pollinations ↗")}
+                        }
                         DesignPanel("Idiomas · Android local"){
                             Text("Español se descarga automáticamente si está disponible. La primera descarga necesita conexión.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                             val models=s.localSpeechModels
@@ -182,7 +189,7 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
                         OutlinedButton(onClick=importSoniqo,enabled=!s.preparing&&!s.listening&&!s.starting){Text("Importar paquete Soniqo ZIP")}
                         Text("Android local es experimental: depende del servicio y del idioma instalado en tu teléfono. No es el motor privado de Transcripción instantánea. Solo usa el micrófono. Soniqo y Moonshine admiten audio directo del video.",style=MaterialTheme.typography.bodySmall)
                         Toggle("Priorizar solo transcripción",s.transcriptionOnly,vm::setTranscriptionOnly)
-                        Text("Pausa respuestas y resúmenes durante la escucha. El resumen puede generarse al detenerla. Actívalo antes de grabar para descargar el modelo de respuestas de memoria.",style=MaterialTheme.typography.bodySmall)
+                        Text("Pausa respuestas y resúmenes durante la escucha. El resumen online puede generarse al detenerla. No se carga un modelo local para responder.",style=MaterialTheme.typography.bodySmall)
                         }
                         DesignPanel("Durante la conversación"){
                         Toggle("Responder preguntas del audio",s.autoAnswers,vm::setAnswers)
@@ -193,16 +200,16 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
                         DesignPanel("Modelos en el dispositivo"){
                         Text(s.models)
                         OutlinedButton(onClick=importSpeech,enabled=!s.listening&&!s.generating&&!s.preparing){Text("Importar modelo de voz ZIP")}
-                        OutlinedButton(onClick=importLanguage,enabled=!s.listening&&!s.generating&&!s.preparing){Text("Importar modelo de respuestas")}
+                        Text("Las respuestas online no requieren descargar un modelo al teléfono.",style=MaterialTheme.typography.bodySmall)
                         }
                         DesignPanel("Privacidad y herramientas"){
                         OutlinedButton(onClick=diagnostics,enabled=!s.preparing){Text("Abrir pruebas y métricas")}
-                        Text("Funciona sin el Mac y sin permiso de Internet. Al salir se pausa el micrófono y se detienen las respuestas. La transcripción, preguntas, respuestas y resumen se guardan en el historial privado. El audio nunca se guarda. Puedes borrar cada conversación.")
+                        Text("Funciona sin el Mac. La transcripción usa el motor de voz elegido; las respuestas y los resúmenes usan Internet. Al salir se pausa el micrófono y se cancelan las solicitudes pendientes. El historial se guarda en este dispositivo. La app no guarda audio. Puedes borrar cada conversación.")
                         Text("Las explicaciones del modelo pueden equivocarse. No realizan búsquedas externas ni ejecutan órdenes del audio. Las tareas y recuerdos requieren pulsar Guardar.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
-                if(tab==2)Text("V · Android 0.20",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                if(tab==2)Text("V · Android 0.22",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

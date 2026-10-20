@@ -52,13 +52,15 @@ class ScreenSnapshotTest {
             }
             render(activity,"v-modern-empty-synthetic.png")
             instrumentation.runOnMainSync{
-                checkNotNull(vm).state.value=checkNotNull(vm).state.value.copy(conversationTitle="Astronomía · clase 1",lines=listOf(SpeechLine(1701,"Un eclipse solar ocurre cuando la Luna pasa entre la Tierra y el Sol. ¿Por qué vemos bandas de sombra durante un eclipse?",true)),answers=listOf(LiveAnswer("sample",1701,1,"¿Por qué vemos bandas de sombra durante un eclipse?","Las variaciones del aire desvían la luz del Sol y pueden producir franjas claras y oscuras cerca de la totalidad.","Lista")))
+                checkNotNull(vm).state.value=checkNotNull(vm).state.value.copy(conversationTitle="Astronomía · clase 1",lines=listOf(SpeechLine(1701,"Un eclipse solar ocurre cuando la Luna pasa entre la Tierra y el Sol. ¿Por qué vemos bandas de sombra durante un eclipse?",true)),answers=listOf(LiveAnswer("sample",1701,1,"¿Por qué vemos bandas de sombra durante un eclipse?","Las variaciones del aire desvían la luz del Sol y pueden producir franjas claras y oscuras cerca de la totalidad.","Lista · online · explicación general sin verificación externa")))
             }
             render(activity,"v-modern-text-synthetic.png")
+            render(activity,"v-online-text-synthetic.png")
             instrumentation.runOnMainSync{activity.setContent{VoiceTheme{AssistantScreen(checkNotNull(vm),{}, {}, {}, {}, {}, {},initialSection=1)}}}
             render(activity,"v-modern-questions-synthetic.png")
             instrumentation.runOnMainSync{activity.setContent{VoiceTheme{AssistantScreen(checkNotNull(vm),{}, {}, {}, {}, {}, {},initialTab=2)}}}
             render(activity,"v-simple-settings-synthetic.png")
+            render(activity,"v-online-settings-synthetic.png")
             instrumentation.runOnMainSync{checkNotNull(vm).state.value=checkNotNull(vm).state.value.copy(conversationKey=-1801,history=listOf(ConversationEntry(-1801,"Astronomía · eclipses",System.currentTimeMillis(),1,1),ConversationEntry(-1802,"Cálculo · integrales",System.currentTimeMillis(),3,2),ConversationEntry(-1803,"Historia · Revolución industrial",System.currentTimeMillis()-86400000,4,2),ConversationEntry(-1804,"Biología · división celular",System.currentTimeMillis()-172800000,4,1)));activity.setContent{VoiceTheme{AssistantScreen(checkNotNull(vm),{}, {}, {}, {}, {}, {},initialDrawer=true)}}}
             render(activity,"v-study-sidebar-synthetic.png")
             val example=checkNotNull(vm).state.value

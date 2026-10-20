@@ -105,9 +105,9 @@ import androidx.compose.ui.unit.sp
         else Text(if(a.status=="En espera")"Pregunta detectada. Preparando respuesta…"else a.status,color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.bodyMedium)
         if(a.text.isNotBlank()){
             if(active)Text("Respondiendo en vivo…",color=VoiceAccent,style=MaterialTheme.typography.labelSmall)
-            else Text(if(a.status.startsWith("Lista"))"Respuesta local · sin verificación externa"else a.status,style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+            else Text(if(a.status.startsWith("Lista"))if(a.status.contains("online"))"Respuesta online · sin verificación externa"else "Respuesta guardada · sin verificación externa"else a.status,style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             a.firstTextMs?.let{Text("Primer texto · %.1f s".format(it/1000),style=MaterialTheme.typography.labelSmall,color=VoiceAccent)}
-            Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){TextButton(onClick={onSpeak(a.text)},contentPadding=PaddingValues(horizontal=0.dp,vertical=6.dp)){Text("Escuchar")};TextButton(onClick={onSave(a.text,"Respuesta local, revisar antes de guardar")}){Text("Guardar")}}
+            Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){TextButton(onClick={onSpeak(a.text)},contentPadding=PaddingValues(horizontal=0.dp,vertical=6.dp)){Text("Escuchar")};TextButton(onClick={onSave(a.text,if(a.status.contains("online"))"Respuesta online, revisar antes de guardar"else "Respuesta guardada, revisar antes de guardar")}){Text("Guardar")}}
         }
     }
 }

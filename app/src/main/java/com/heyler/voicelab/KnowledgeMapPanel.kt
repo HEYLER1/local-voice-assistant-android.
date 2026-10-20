@@ -23,21 +23,24 @@ import androidx.compose.ui.unit.sp
 
 @Composable fun StudySummaryPanel(s:AssistantState,onQuestion:(String)->Unit,onEdit:(SpeechLine)->Unit,onSave:(String,String)->Unit,onRefresh:()->Unit){
     val guide=remember(s.lines){StudyGuide.build(s.lines)}
+    val lesson=remember(s.lines){LessonMemory.build(s.lines)}
     var section by rememberSaveable{mutableIntStateOf(0)}
     Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
         Text("Resumen",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.SemiBold,modifier=Modifier.weight(1f))
-        TextButton(onClick=onRefresh,enabled=!s.generating&&s.lines.sumOf{it.text.length}>=100&&!(s.transcriptionOnly&&(s.listening||s.starting))){Text("Actualizar")}
+        TextButton(onClick=onRefresh,enabled=s.onlineAnswers&&!s.generating&&s.lines.sumOf{it.text.length}>=100&&!(s.transcriptionOnly&&(s.listening||s.starting))){Text("Actualizar")}
     }
+    if(s.lines.isNotEmpty())Text("${if(lesson.topics.isEmpty())"Contexto orientativo"else "Tema"} · ${lesson.topic}",style=MaterialTheme.typography.bodySmall,color=VoiceGreen)
     if(s.summary.isNotBlank()){
         SelectionContainer{Text(ReadableAnswer.format(s.summary),style=MaterialTheme.typography.bodyLarge,lineHeight=27.sp)}
         Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
-            Text("Síntesis del contexto reciente",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.weight(1f))
+            Text("Síntesis de fragmentos seleccionados de la clase",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.weight(1f))
             TextButton(onClick={onSave(s.summary,"Resumen generado, revisar antes de guardar")},contentPadding=PaddingValues(0.dp)){Text("Guardar")}
         }
-    }else Text(if(s.generating)"Preparando la síntesis…"else "Toca Actualizar para sintetizar lo hablado. Ya puedes repasar las ideas extraídas abajo.",style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
+    }else Text(if(s.generating)"Preparando la síntesis…"else if(!s.onlineAnswers)"La síntesis online está desactivada. Puedes repasar las ideas extraídas abajo."else "Toca Actualizar para sintetizar lo hablado. Ya puedes repasar las ideas extraídas abajo.",style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
+    if(s.summaryError.isNotBlank())Text(s.summaryError,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.error)
     HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant)
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(22.dp)){
-        listOf("Ideas","Conceptos","Repaso","Cifras").forEachIndexed{index,label->
+        listOf(0 to "Ideas",4 to "Tareas ${lesson.tasks.size}",5 to "Examen ${lesson.exams.size}",1 to "Conceptos",2 to "Repaso",3 to "Cifras").forEach{(index,label)->
             Column(Modifier.clickable{section=index}.semantics{selected=section==index;role=Role.Tab}.padding(top=6.dp),horizontalAlignment=Alignment.CenterHorizontally){
                 Text(label,color=if(section==index)VoiceAccent else MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.labelLarge,modifier=Modifier.padding(bottom=10.dp))
                 Box(Modifier.width(28.dp).height(2.dp).background(if(section==index)VoiceAccent else MaterialTheme.colorScheme.background))
@@ -85,8 +88,37 @@ import androidx.compose.ui.unit.sp
                 }
             }
         }
+        4->{
+            Text("Qué hay que preparar",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold)
+            if(lesson.tasks.isEmpty())StudyEmpty("Las tareas, trabajos, lecturas y ejercicios indicados en la clase aparecerán aquí.")
+            lesson.tasks.forEach{item->StudyInstructionPanel(item,s,onEdit,onSave)}
+        }
+        5->{
+            Text("Avisos de evaluación",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold)
+            if(lesson.exams.isEmpty())StudyEmpty("Aquí se reúnen las menciones explícitas a preguntas de examen, parciales y evaluaciones.")
+            lesson.exams.forEach{item->StudyInstructionPanel(item,s,onEdit,onSave)}
+        }
     }
     Text("Extractos del audio · revisa posibles errores de transcripción y del modelo.",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+}
+@Composable private fun StudyInstructionPanel(item:StudyInstruction,s:AssistantState,onEdit:(SpeechLine)->Unit,onSave:(String,String)->Unit){
+    var expanded by rememberSaveable(item.id){mutableStateOf(false)}
+    Column(Modifier.fillMaxWidth().animateContentSize(),verticalArrangement=Arrangement.spacedBy(6.dp)){
+        Text(item.kind.label,color=VoiceGreen,style=MaterialTheme.typography.labelLarge)
+        SelectionContainer{Text(item.excerpt.text,lineHeight=25.sp)}
+        if(item.timing.isNotBlank())Text("Plazo citado · ${item.timing}",style=MaterialTheme.typography.bodySmall,color=VoiceAccent)
+        if(item.context.any{it!=item.excerpt}){
+            TextButton(onClick={expanded=!expanded},contentPadding=PaddingValues(0.dp)){Text(if(expanded)"Ocultar contexto"else "Ver contexto de la indicación")}
+            AnimatedVisibility(expanded){Column(verticalArrangement=Arrangement.spacedBy(6.dp)){
+                item.context.filter{it!=item.excerpt}.forEach{excerpt->Text(excerpt.text,style=MaterialTheme.typography.bodySmall);StudySource(excerpt,s,onEdit)}
+            }}
+        }
+        Row(horizontalArrangement=Arrangement.spacedBy(12.dp)){
+            StudySource(item.excerpt,s,onEdit)
+            if(item.kind!=StudyInstructionKind.EXAM)TextButton(onClick={onSave(item.context.joinToString(" "){it.text},"Tarea de clase · ${item.kind.label}; indicación literal para revisar")},contentPadding=PaddingValues(0.dp)){Text("Guardar como tarea")}
+        }
+        HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant)
+    }
 }
 @Composable private fun StudySource(excerpt:StudyExcerpt,s:AssistantState,onEdit:(SpeechLine)->Unit){
     s.lines.firstOrNull{it.id==excerpt.sourceId}?.let{line->TextButton(onClick={onEdit(line)},contentPadding=PaddingValues(0.dp)){Text("Ver en el texto ↗",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)}}

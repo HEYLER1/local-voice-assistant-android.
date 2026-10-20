@@ -1,18 +1,63 @@
-# V · Local Voice Assistant Android
+# V · Voice Assistant Android
 
 ![Logo de V](docs/assets/v-logo.svg)
 
-Asistente nativo en Kotlin y Jetpack Compose: transcripción local, preguntas en vivo, historial privado y apuntes para estudiar.
+Asistente para estudiantes en Kotlin y Jetpack Compose: transcripción, respuestas online sin registro ni clave, contexto de clase, tareas, avisos de examen e historial en el dispositivo.
 
-## Interfaz actual · 0.20
+## Interfaz actual · 0.22
 
-Texto, Preguntas y Resumen fijos arriba. Historial lateral compacto con búsqueda y opciones por conversación. Escritura y micrófono en el mismo chat. La paleta conserva el fondo oscuro y los acentos violeta y verde de V.
+Texto, Preguntas y Resumen permanecen arriba. Resumen organiza Ideas, Tareas, Examen, Conceptos, Repaso y Cifras. El tema y los fragmentos anteriores ayudan a interpretar las preguntas; las indicaciones mantienen su texto y enlace de origen.
 
 Las capturas siguientes usan contenido ficticio.
 
-![Chat con texto de ejemplo](docs/assets/v-modern-text-synthetic.png)
+![Tareas y plazo literal de una clase ficticia](docs/assets/v-student-tasks-synthetic.png)
 
-![Resumen para estudiar con texto de ejemplo](docs/assets/v-study-summary-synthetic.png)
+![Aviso de examen y contexto de una clase ficticia](docs/assets/v-student-exam-synthetic.png)
+
+## Android 0.22: contexto de clase, tareas y examen
+
+Las respuestas recuperan información de la conversación guardada: tema declarado, inicio de la clase, fragmentos relacionados con la consulta, indicaciones académicas, hilo reciente y hasta tres intercambios previos del mismo chat. Las respuestas previas se identifican como explicaciones del asistente, no citas del docente; las consultas a la biblioteca privada quedan excluidas. Las preguntas breves como «¿Cómo se calcula?» pueden detectarse si antes se declaró un tema; se siguen rechazando fragmentos incoherentes como «¿que hay un?». Una pregunta detectada en el audio usa el contexto disponible hasta su fragmento de origen, para que un cambio posterior de materia no cambie su referencia. Si una pregunta menciona otro tema explícitamente, las instrucciones del modelo permiten ese cambio; si la referencia no se puede resolver, le indican pedir una aclaración.
+
+Resumen incorpora Tareas y Examen junto a Ideas, Conceptos, Repaso y Cifras. Se muestran citas de la transcripción con enlaces al original. Tareas reúne indicaciones de tarea, trabajo, lectura y ejercicios. Examen reúne menciones explícitas de evaluación y su contexto inmediato. «Guardar como tarea» abre la revisión con el tipo Tarea seleccionado; no crea fechas, recordatorios ni eventos automáticamente. Los plazos se conservan literalmente, por ejemplo «para el viernes». Las indicaciones negadas y las hipótesis parciales se descartan de esta extracción. El término físico «trabajo de una fuerza» no se interpreta por sí solo como un trabajo para entregar.
+
+| Caso en la clase | Comportamiento implementado |
+| --- | --- |
+| «Hoy vamos a estudiar el trabajo mecánico» | Mantiene ese tema como referencia para preguntas posteriores. |
+| «Como tarea para el viernes…» | Muestra la indicación en Tareas con el plazo literal y acceso al texto. |
+| «Deben presentar un trabajo grupal…» | Lo clasifica como trabajo dentro de Tareas. |
+| «Lean el capítulo…» / «Resuelvan los ejercicios…» | Reúne la lectura o práctica como indicación académica. |
+| «Esto es una pregunta de examen» / «Esta pregunta es de examen» | Reúne el aviso y los fragmentos contiguos para repasar. |
+| «No hay tarea» / «Esto no entra en el examen» | No crea una indicación afirmativa a partir de esa frase. |
+| «¿Qué tareas dejó el profesor?» | Consulta el contexto de la clase; no se desvía al buscador de la biblioteca. |
+| «Muestra mis tareas guardadas» | Sigue consultando la biblioteca en el dispositivo. |
+
+La organización se reconstruye a partir de los fragmentos que ya guarda cada conversación: vuelve al reabrirla, refleja las correcciones del texto y no mezcla chats. El título automático del historial prefiere el primer tema declarado; los nombres elegidos por el usuario se conservan. Si no hay un tema explícito, la vista muestra palabras orientativas del contexto, no una materia confirmada. Esto mantiene referencias de lo hablado; no predice lo que dirá el docente ni qué caerá en un examen.
+
+Las solicitudes a Pollinations ahora pueden incluir hasta 7.000 caracteres de contexto seleccionado para preguntas, hasta 3.000 de intercambios previos del chat y hasta 10.000 para el contexto de los resúmenes, con un límite total de 12.000 caracteres de texto de usuario por solicitud. No se envían el audio, la biblioteca ni otros chats. El resumen usa una selección de diferentes partes de la clase, temas e indicaciones; sigue sin garantizar cobertura exhaustiva de una clase larga. No se añade una llamada de análisis antes de cada respuesta. Las explicaciones se adaptan al estudio, con pasos y unidades para ejercicios y planes para trabajos, manteniendo las condiciones citadas por el docente separadas de las explicaciones adicionales.
+
+La extracción usa reglas lingüísticas; no comprende infaliblemente todas las formas de hablar y puede requerir correcciones si el audio es ambiguo o contiene errores. Tampoco gestiona automáticamente la cancelación de una tarea antigua cuando el docente da después una instrucción contradictoria: hay que revisar el contexto literal. El modelo recibe la instrucción de priorizar la última indicación explícita y señalar contradicciones. Cambiar el modelo no corrige por sí solo una mala transcripción.
+
+Verificación de 0.22: 38 pruebas unitarias y diez instrumentadas pasaron. Se comprobaron recuperación del tema y fórmulas antiguas, separación de chats, consultas de tareas de clase frente a la biblioteca, exclusión de textos guardados del contexto online, seguimiento de respuestas previas, negaciones, persistencia de fuentes, menús de tareas/examen y cancelación/errores de red. Una prueba real del servicio respondió «¿Cómo se calcula?» usando el tema y el ejemplo anteriores de trabajo mecánico (10 N × 3 m = 30 J), separados de la pregunta por 18 fragmentos de apuntes. El primer texto llegó en 8,30 segundos en la última ejecución; no es un promedio ni una medición general de precisión. Las capturas usan datos ficticios y se revisaron visualmente; no se probó el micrófono físico ni una clase real larga.
+
+[Resultado ficticio de contexto](docs/student-context-synthetic.json) · [Tareas](docs/assets/v-student-tasks-synthetic.png) · [Examen](docs/assets/v-student-exam-synthetic.png).
+
+## Android 0.21: respuestas online sin cuenta ni clave
+
+Las preguntas y los resúmenes de la app principal usan GPT-OSS 20B a través del acceso anónimo de Pollinations Classic (`openai-fast`). No se necesita registro, clave ni importar un modelo de respuestas. El proveedor puede cambiar el modelo asociado al alias. El laboratorio conserva sus motores locales para pruebas; la conversación principal ya no carga Qwen. La transcripción mantiene el motor elegido por el usuario.
+
+En Ajustes, «Usar respuestas online» permite activar o desactivar las solicitudes; está activado por defecto en esta versión. La app ahora solicita el permiso de Internet. Las solicitudes HTTPS usan POST: envían la pregunta escrita o detectada y contexto limitado de la transcripción. Para preguntas se usan hasta 900 caracteres de contexto; para el resumen, los últimos ocho fragmentos, limitados a 1.200 caracteres. No se envían audio ni listas de textos de la biblioteca. Las consultas de recuerdos/tareas guardados siguen resolviéndose en el dispositivo. Las respuestas y el resumen recibidos se conservan en el historial privado. Consultar la [privacidad de Pollinations](https://enter.pollinations.ai/privacy) antes de utilizar contenido sensible.
+
+Las respuestas se muestran progresivamente; el canal de razonamiento no se presenta como respuesta. Detener una respuesta, desactivar el servicio, cambiar de conversación o salir de la app cancela la solicitud activa. La captura de voz no espera a un bloqueo del modelo local para iniciar una respuesta online. No hay reintentos automáticos, cambio oculto de proveedor ni uso de claves incluidas en el APK. El cliente limita la duración de cada solicitud a 65 segundos y muestra errores de conexión, cuota o respuesta incompleta.
+
+El servicio gratuito depende de Internet, sus límites y su disponibilidad; no se garantiza un tiempo fijo de respuesta ni exactitud. Una síntesis breve del contexto reciente no representa el resumen completo de una clase larga. Las notas extractivas de Ideas, Conceptos y Cifras siguen funcionando con la transcripción guardada, incluso si las respuestas online están desactivadas.
+
+Verificación de 0.21: 27 pruebas unitarias y siete pruebas instrumentadas pasaron. Las pruebas controladas cubren solicitudes sin credenciales, exclusión del canal de razonamiento, cuota, truncado, cancelación y uso del servicio desde el ViewModel sin cargar el LLM local. Una prueba real en el emulador envió una pregunta ficticia de astronomía, recibió texto progresivo y generó un resumen: primer texto en 6,52 segundos desde la cola de respuesta, en una sola ejecución. No es una medición de precisión, un promedio de latencia ni una prueba del micrófono físico. Capturas revisadas con contenido ficticio.
+
+Resultado de la prueba real: [pregunta, respuesta y resumen ficticios](docs/online-response-synthetic.json).
+
+Capturas ficticias: [Ajustes online](docs/assets/v-online-settings-synthetic.png) · [Conversación](docs/assets/v-online-text-synthetic.png).
+
+Las secciones 0.20 y anteriores describen versiones previas. Sus referencias al funcionamiento sin permiso de Internet no aplican a 0.21.
 
 ## Android 0.20: historial más sencillo
 
@@ -130,18 +175,18 @@ El historial conserva la transcripción, preguntas, respuestas y resumen de cada
 
 # V · Asistente Android independiente
 
-Versión 0.20: app nativa Kotlin + Jetpack Compose para Android ARM64. El Galaxy A54 de 8 GB se utilizó en el laboratorio de rendimiento. Escucha, transcripción progresiva, preguntas relevantes, respuestas locales, resumen reciente y textos seleccionados persistentes. Funciona sin servidor Mac y sin servicios remotos de transcripción. El laboratorio de rendimiento sigue disponible en Ajustes.
+Versión 0.22: app nativa Kotlin + Jetpack Compose para Android ARM64. El Galaxy A54 de 8 GB se utilizó en el laboratorio de rendimiento. Escucha, transcripción progresiva, preguntas relevantes, respuestas online, resumen de fragmentos de la clase y textos seleccionados persistentes. Funciona sin servidor Mac. La transcripción usa el motor de voz elegido y las respuestas/resúmenes necesitan Internet mediante Pollinations Classic. El laboratorio de rendimiento sigue disponible en Ajustes.
 
 ## Interfaz y uso
 
 - Campo de escritura y micrófono circular en la barra inferior del chat. Toca el micrófono para iniciar y vuelve a tocar para pausar. El indicador muestra RMS medido del audio del micrófono, no una animación de audio simulado.
 - Diseño oscuro con acentos violetas; la escucha usa un indicador verde. Texto, Preguntas y Resumen en la cabecera; historial, textos guardados y Ajustes en el menú lateral.
 - Texto plano continuo por defecto. «Editar o guardar fragmentos» permite corregir texto, asignar una etiqueta manual y guardar una selección. Activar «Etiquetar voces» muestra los bloques; no añade clasificaciones de pregunta/afirmación al texto.
-- Respuestas progresivas junto a la transcripción en ventanas de al menos 600 dp; en vertical aparece primero la respuesta más reciente para conservar legibilidad. Explicaciones de conocimiento general, sin verificación externa.
+- Respuestas progresivas junto a la transcripción en ventanas de al menos 600 dp; en vertical se muestra una vista breve de la respuesta seleccionada con acceso a la vista completa. Explicaciones de conocimiento general, sin verificación externa.
 - Detección por señales lingüísticas conservadoras: requiere una pregunta con contenido, descarta fragmentos incoherentes conocidos y no responde a cualquier «que». No es una evaluación semántica infalible ni una reparación del audio.
-- Resumen de contexto reciente: solicita una actualización cada 20 segundos cuando la generación está libre, o al pulsar Actualizar resumen. Usa las últimas ocho intervenciones hasta 1.200 caracteres; no se presenta como resumen exhaustivo de una sesión larga. Los fragmentos relevantes son citas literales seleccionadas por reglas de longitud y palabras clave.
+- Resumen de fragmentos seleccionados de la clase: solicita una actualización cada 20 segundos cuando la generación está libre y cambia el contexto, o al pulsar Actualizar. Incluye temas, indicaciones académicas y una selección de diferentes partes de la conversación hasta 10.000 caracteres; no es cobertura exhaustiva de una clase larga. Tareas y Examen conservan citas y acceso al texto original.
 - Guardado explícito de datos estructurados: recuerdos, tareas, cursos y proyectos con IDs estables, edición y borrado. Las tareas permiten curso/proyecto, fecha escrita por el usuario y completar/reabrir. No se inventan fechas, responsables ni obligaciones a partir del audio. La procedencia distingue texto escrito, transcripción, resumen y respuesta del modelo.
-- El mensaje escrito «qué tengo pendiente de Cálculo» consulta los textos seleccionados localmente. Las preguntas del audio nunca reciben esos datos ni ejecutan acciones de guardado.
+- Las consultas explícitas sobre la biblioteca y los pendientes sin contexto de clase se resuelven en el dispositivo. «¿Qué tareas dejó el profesor?» usa el contexto de la clase. Las preguntas del audio no reciben la biblioteca ni ejecutan acciones de guardado.
 - «Escuchar» usa una voz española del sistema que no requiera conexión; si no está instalada, indica cómo habilitarla. Pausa el micrófono para evitar transcribir su propia salida. No hay lectura automática.
 
 ## Actualizar desde el laboratorio
@@ -150,7 +195,7 @@ Instala el nuevo APK **encima de la app anterior**, sin desinstalarla. Conserva 
 
 ## Concurrencia y contexto
 
-ASR y generación se ejecutan en trabajos separados. Solo una generación local trabaja a la vez; la cola admite ocho solicitudes pendientes y muestra cuando una pregunta se omite por saturación. Las hipótesis se revisan sobre el mismo fragmento, con espera de 1.500 ms para parciales y 500 ms para finales. Cambios de la pregunta invalidan la respuesta derivada; cambios de narración que conservan la pregunta no la repiten. No se reinicia el motor cada frase.
+ASR y generación se ejecutan en trabajos separados. Solo una solicitud de generación online trabaja a la vez; la cola admite ocho solicitudes pendientes y muestra cuando una pregunta se omite por saturación. Las hipótesis se revisan sobre el mismo fragmento, con espera de 1.500 ms para parciales y 500 ms para finales. Cambios de la pregunta invalidan la respuesta derivada; cambios de narración que conservan la pregunta no la repiten. No se reinicia el motor cada frase.
 
 El historial privado conserva los fragmentos y respuestas de cada conversación sin el recorte de las versiones antiguas. El contexto enviado al modelo sigue limitado. Borrar sesión elimina ese contexto y su entrada de historial sin borrar textos elegidos. Al enviar la app al segundo plano se detienen escucha y generación; la rotación conserva la sesión y la captura; los modelos pueden seguir residentes mientras exista el proceso. La base SQLite de textos elegidos usa almacenamiento privado de la app, copias de seguridad deshabilitadas y borrado directo, sin embeddings ni índices externos. No se afirma cifrado propio adicional al almacenamiento del dispositivo ni autenticación biométrica.
 
@@ -163,19 +208,23 @@ Las etiquetas de voz son manuales. No incluye huellas de voz, diarización autom
 - Android Gradle Plugin 9.4.1, Gradle 9.6.0, Kotlin y Compose Compiler 2.4.0; Android SDK 37.
 - Android 12/API 31 o posterior, ARM64. Las mediciones disponibles del A54 no garantizan el mismo rendimiento en otros dispositivos.
 - Moonshine Voice Android 0.1.5: Small Streaming español, arquitectura 4. Los mismos archivos del modelo de escritorio, sin reinstanciarlo por frase y sin reinicios arbitrarios cada 12 segundos.
-- LiteRT-LM Android 0.18.0, CPU. Modelo inicial de prueba: Qwen3 0.6B mixed INT4. La CPU permite una base comparable; GPU/NPU no se presentan como compatibles o más rápidas en el Exynos del A54 sin ensayos.
-- La plantilla de conversación está adaptada a Qwen3 y a los mensajes con partes de LiteRT-LM 0.18.0. Importar otros modelos no implica compatibilidad; requieren su plantilla y pruebas propias.
-- Modelos importados con el selector de archivos. El APK no necesita permiso de Internet; no incluye pesos grandes. No hay descargas ni fallbacks remotos ocultos.
+- Respuestas y resúmenes de la app principal: GPT-OSS 20B mediante Pollinations Classic, acceso anónimo sin registro ni clave. HTTPS con resultados progresivos y límites del proveedor.
+- Laboratorio opcional: LiteRT-LM Android 0.18.0, CPU y Qwen3 0.6B mixed INT4. Se conserva para reproducir los ensayos locales anteriores; no se carga para responder en el chat.
+- La plantilla local del laboratorio sigue adaptada a Qwen3. Las respuestas online usan instrucciones para estudiantes, contexto seleccionado de esta conversación y hasta tres explicaciones previas; no reciben los textos de la biblioteca.
+- Los motores de voz importados utilizan el selector de archivos; Android local puede gestionar idiomas mediante el servicio del sistema. El APK incluye permiso de Internet para responder y resumir. No incorpora pesos grandes ni cambia de proveedor si falla Pollinations.
 
 ## Instalar y preparar
 
 1. Compila con Android Studio o `./gradlew :app:assembleDebug`. Se requiere JDK 21 o posterior compatible con Gradle; se probó el JDK de Android Studio.
 2. Instala `app/build/outputs/apk/debug/app-debug.apk` en el teléfono o con `adb install -r ...`.
-3. Importa `moonshine-es.zip` con **Importar voz ZIP**. Contiene los ocho archivos de Small Streaming ES, todos en la raíz. El ZIP preparado localmente está en `../models/android/` y se excluye de Git.
-4. Descarga y copia `qwen3_0_6b_mixed_int4.litertlm` al teléfono, y usa **Importar LLM**. Fuente pública fijada: https://huggingface.co/litert-community/Qwen3-0.6B/tree/a3c5d805ae362dff7f580bc25f2dfb9a5a7eaa76 . No requiere un servidor; la primera descarga sí necesita red.
-5. Activa modo avión. Los ensayos con archivos y las respuestas deben seguir funcionando. El permiso del micrófono se pide solo al pulsar **Escuchar micrófono**.
+3. Elige el motor de voz en Ajustes. Android local requiere Android 13 o posterior, un servicio compatible y el idioma instalado; se solicita español automáticamente si falta y el servicio lo permite. Para Moonshine o Soniqo importa su paquete correspondiente.
+4. Mantén Internet conectado y «Usar respuestas online» activado. No hace falta importar un LLM ni crear cuenta o clave de Pollinations. Se envían la pregunta, contexto seleccionado de la clase y hasta tres intercambios anteriores; no se envían audio, la biblioteca ni otros chats.
+5. Pulsa el micrófono para escuchar o escribe en el mismo chat. Revisa Resumen → Tareas/Examen para las indicaciones extraídas. Desactivar respuestas online evita estas solicitudes; las notas extraídas de la transcripción guardada siguen disponibles.
+6. Solo para reproducir el laboratorio local anterior, importa un `.litertlm` compatible desde el laboratorio. Las mediciones históricas de Qwen no describen el rendimiento del servicio online.
 
 ## Resultados estadísticos y cómo interpretarlos
+
+Estas tablas corresponden al laboratorio local histórico y a pruebas de transcripción; no miden la calidad ni la latencia de las respuestas online de 0.22. El resultado online de ejemplo está en [student-context-synthetic.json](docs/student-context-synthetic.json) y representa una sola ejecución.
 
 Hay dos ensayos distintos: el informe de laboratorio del Galaxy A54 aportado por el usuario y una prueba de números en emulador. **No son una medición de precisión general ni una garantía de rendimiento de la interfaz 0.12.** El laboratorio procesa clips sintéticos; no reproduce una clase larga, música real ni el tiempo completo desde que una persona habla hasta que aparece una respuesta.
 

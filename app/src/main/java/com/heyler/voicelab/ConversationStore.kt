@@ -17,7 +17,7 @@ class ConversationStore(context:Context):SQLiteOpenHelper(context,"conversations
         val data=JSONObject().put("summary",state.summary).put("name",state.conversationTitle)
         data.put("lines",JSONArray().apply{state.lines.forEach{put(JSONObject().put("id",it.id).put("text",it.text).put("revision",it.revision).put("voice",it.voice))}})
         data.put("answers",JSONArray().apply{state.answers.forEach{put(JSONObject().put("id",it.id).put("source",it.source?:JSONObject.NULL).put("revision",it.revision).put("question",it.question).put("text",it.text).put("status",it.status).put("first",it.firstTextMs?:JSONObject.NULL))}})
-        val title=state.conversationTitle.ifBlank{if(state.lines.isNotEmpty())KnowledgeOrganizer.build(state.lines).topic else (state.answers.firstOrNull()?.question?:"Conversación").take(90)}
+        val title=state.conversationTitle.ifBlank{if(state.lines.isNotEmpty())(LessonMemory.build(state.lines).topics.firstOrNull()?.title?:KnowledgeOrganizer.build(state.lines).topic).take(90) else (state.answers.firstOrNull()?.question?:"Conversación").take(90)}
         writableDatabase.insertWithOnConflict("sessions",null,ContentValues().apply{put("id",id);put("title",title);put("updated",System.currentTimeMillis());put("data",data.toString())},SQLiteDatabase.CONFLICT_REPLACE)
     }
     fun load(id:Long):AssistantState?=readableDatabase.rawQuery("SELECT data FROM sessions WHERE id=?",arrayOf(id.toString())).use{c->if(!c.moveToFirst())null else{

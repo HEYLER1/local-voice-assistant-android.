@@ -52,10 +52,10 @@ private val VoiceColors=darkColorScheme(
 @Composable fun VoiceHeader(listening:Boolean,compact:Boolean=false,starting:Boolean=false){
     Row(Modifier.fillMaxWidth().padding(top=if(compact)4.dp else 12.dp,bottom=if(compact)6.dp else 14.dp),verticalAlignment=Alignment.CenterVertically){
         Image(painterResource(R.drawable.brand_mark),contentDescription="V · voz y conocimiento",modifier=Modifier.size(if(compact)32.dp else 42.dp))
-        Column(Modifier.weight(1f).padding(start=12.dp)){Text("Voz local",style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.SemiBold);if(!compact)Text("Tu voz, en claro.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
+        Column(Modifier.weight(1f).padding(start=12.dp)){Text("V · Asistente",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold);if(!compact)Text("Tu voz, en claro.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
         Row(Modifier.background(if(listening)VoiceGreen.copy(alpha=.12f) else VoiceAccent.copy(alpha=.12f),RoundedCornerShape(50)).padding(horizontal=12.dp,vertical=7.dp),verticalAlignment=Alignment.CenterVertically){
             Box(Modifier.size(6.dp).background(if(listening)VoiceGreen else VoiceAccent,CircleShape));Spacer(Modifier.width(6.dp))
-            Text(if(starting)"PREPARANDO"else if(listening)"EN VIVO" else "LOCAL",style=MaterialTheme.typography.labelSmall,color=if(listening)VoiceGreen else VoiceAccent,fontWeight=FontWeight.Bold)
+            Text(if(starting)"PREPARANDO"else if(listening)"EN VIVO" else "LISTO",style=MaterialTheme.typography.labelSmall,color=if(listening)VoiceGreen else VoiceAccent,fontWeight=FontWeight.Bold)
         }
     }
 }

@@ -1,0 +1,9 @@
+{
+  "fixture": "astronomy-fictional",
+  "provider": "GPT-OSS 20B · Pollinations Classic",
+  "question": "¿Por qué ocurre un eclipse solar?",
+  "answer": "Un eclipse solar acontece cuando la Luna se interpone entre la Tierra y el Sol, bloqueando total o parcialmente la luz solar; esto solo sucede durante la fase de luna nueva, cuando los tres cuerpos están alineados.",
+  "firstTextMs": 6522.344003,
+  "summary": "En la clase ficticia de astronomía se estudia cómo la Luna pasa entre la Tierra y el Sol. Luego se plantea la pregunta: ¿por qué ocurre un eclipse solar?",
+  "localLlmLoaded": false
+}

@@ -1,0 +1,10 @@
+{
+  "fixture": "physics-class-fictional",
+  "topic": "el trabajo mecánico y la energía",
+  "question": "¿Cómo se calcula?",
+  "answer": "El trabajo mecánico de una fuerza constante y paralela al desplazamiento se calcula con la fórmula:  \n\\( W = F \\times d \\).  \nEn la clase se usó \\(F = 10 \\text{ N}\\) y \\(d = 3 \\text{ m}\\).  \nEntonces \\( W = 10 \\, \\text{N} \\times 3 \\, \\text{m} = 30 \\, \\text{J}\\) (julios).  \nSi la fuerza no es paralela al movimiento, se debe usar el producto escalar: \\(W = F\\,d\\cos\\theta\\).  \nRecuerda que la unidad de trabajo es el julio, que equivale a newton‑metro.",
+  "firstTextMs": 8297.188462,
+  "homework": "Como tarea para el viernes, resolver los ejercicios 1 y 2 de la guía.",
+  "examNotice": "Esto es una pregunta de examen.",
+  "note": "One network smoke test; not a general accuracy or latency benchmark"
+}
