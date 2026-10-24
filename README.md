@@ -2,9 +2,9 @@
 
 ![Logo de V](docs/assets/v-logo.svg)
 
-Asistente para estudiantes en Kotlin y Jetpack Compose: transcripción, respuestas online sin registro ni clave, contexto de clase, tareas, avisos de examen e historial en el dispositivo.
+Asistente para estudiantes en Kotlin y Jetpack Compose: transcripción, respuestas online sin registro ni clave, contexto de clase, tareas, avisos de examen e historial en el dispositivo y escucha en segundo plano con botón flotante.
 
-## Interfaz actual · 0.22
+## Interfaz actual · 0.23
 
 Texto, Preguntas y Resumen permanecen arriba. Resumen organiza Ideas, Tareas, Examen, Conceptos, Repaso y Cifras. El tema y los fragmentos anteriores ayudan a interpretar las preguntas; las indicaciones mantienen su texto y enlace de origen.
 
@@ -13,6 +13,36 @@ Las capturas siguientes usan contenido ficticio.
 ![Tareas y plazo literal de una clase ficticia](docs/assets/v-student-tasks-synthetic.png)
 
 ![Aviso de examen y contexto de una clase ficticia](docs/assets/v-student-exam-synthetic.png)
+
+## Android 0.23: escucha en segundo plano y botón flotante
+
+Puedes iniciar la transcripción y abrir otras aplicaciones sin detenerla. En **Ajustes → Escucha en segundo plano**, «Continuar al salir de la app» viene activado; puedes desactivarlo para recuperar la pausa automática al salir. Las preguntas y los resúmenes online también siguen procesándose durante una escucha activa en segundo plano, con el mismo contexto y proveedor de la versión anterior.
+
+Activa **Botón flotante** en ese apartado y concede «Mostrar sobre otras aplicaciones» en Android. Al activar la burbuja también se activa la escucha en segundo plano. La burbuja aparece solo fuera del chat mientras hay una sesión activa. Se puede arrastrar; al tocarla muestra **Abrir** y **Detener**. Dentro de la app se oculta para dejar libre la conversación. El permiso de superposición es opcional: la escucha en segundo plano no depende de concederlo.
+
+Al iniciar el audio se solicita permiso de notificaciones. Si lo concedes, **V · Escucha activa** permite abrir el chat o detener desde la notificación, sin mostrar fragmentos de la conversación. Si rechazas el permiso, Android puede ocultar esta notificación del panel: vuelve a V para detener o usa la burbuja si la activaste.
+
+| Acción | Resultado |
+| --- | --- |
+| Iniciar micrófono y abrir otra app | Continúa transcribiendo si segundo plano está activado. |
+| Cerrar y volver a abrir la pantalla de V | Recupera la misma conversación y sesión activa. |
+| Tocar la burbuja | Despliega controles para volver o detener. |
+| Detener desde app, burbuja o notificación | Libera la captura, proyección y bloqueo de CPU; retira burbuja y notificación. Conserva el historial. |
+| Desactivar segundo plano y salir | Detiene la escucha y las solicitudes, como antes. |
+| Seleccionar audio de video sin consentimiento | Rechaza la captura; no cambia al micrófono. |
+| Crear o abrir otro chat | Detiene la escucha anterior antes de cambiar de conversación. |
+
+La sesión se comparte entre la pantalla y `ListeningService`, un servicio en primer plano con tipo `microphone` o `mediaProjection` según la fuente. Se inicia desde la app visible, antes de abrir el audio, como exige [Android para servicios de micrófono](https://developer.android.com/develop/background-work/services/fgs/service-types#microphone). Una retención parcial de CPU dura solo mientras el servicio captura o prepara audio; se libera al detener. El servicio no se reinicia automáticamente tras una terminación del proceso ni en el arranque del teléfono. No se guarda audio ni se envía audio al modelo de respuestas. La finalización forzada por Android puede interrumpir la sesión; no se promete ejecución indefinida.
+
+Verificación de 0.23, con datos sintéticos:
+
+| Comprobación | Resultado | Alcance |
+| --- | --- | --- |
+| Pruebas unitarias | 38/38 | Reglas de conversación, contexto y organización. |
+| Pruebas instrumentadas | 14/14 | Servicio, transcripción al cerrar/reabrir, burbuja, parada, preguntas en segundo plano, teclado y cambio de chat. |
+| Audio del teléfono físico | Pendiente | No se midieron autonomía, temperatura ni precisión del A54 en esta actualización. |
+
+Se usaron frases españolas sintetizadas y el reconocedor local de Android en el emulador API 37. Las pruebas de respuestas usaron un flujo SSE simulado, no conversaciones personales ni una evaluación de exactitud del modelo. La autorización de superposición se habilitó temporalmente solo para probar el emulador y se restauró después. [Resultados reproducibles y límites](docs/background-listening-synthetic.json).
 
 ## Android 0.22: contexto de clase, tareas y examen
 
@@ -175,7 +205,7 @@ El historial conserva la transcripción, preguntas, respuestas y resumen de cada
 
 # V · Asistente Android independiente
 
-Versión 0.22: app nativa Kotlin + Jetpack Compose para Android ARM64. El Galaxy A54 de 8 GB se utilizó en el laboratorio de rendimiento. Escucha, transcripción progresiva, preguntas relevantes, respuestas online, resumen de fragmentos de la clase y textos seleccionados persistentes. Funciona sin servidor Mac. La transcripción usa el motor de voz elegido y las respuestas/resúmenes necesitan Internet mediante Pollinations Classic. El laboratorio de rendimiento sigue disponible en Ajustes.
+Versión 0.23: app nativa Kotlin + Jetpack Compose para Android ARM64. El Galaxy A54 de 8 GB se utilizó en el laboratorio de rendimiento. Escucha, transcripción progresiva, preguntas relevantes, respuestas online, resumen de fragmentos de la clase y textos seleccionados persistentes. Funciona sin servidor Mac. La transcripción usa el motor de voz elegido y las respuestas/resúmenes necesitan Internet mediante Pollinations Classic. El laboratorio de rendimiento sigue disponible en Ajustes.
 
 ## Interfaz y uso
 
@@ -197,7 +227,7 @@ Instala el nuevo APK **encima de la app anterior**, sin desinstalarla. Conserva 
 
 ASR y generación se ejecutan en trabajos separados. Solo una solicitud de generación online trabaja a la vez; la cola admite ocho solicitudes pendientes y muestra cuando una pregunta se omite por saturación. Las hipótesis se revisan sobre el mismo fragmento, con espera de 1.500 ms para parciales y 500 ms para finales. Cambios de la pregunta invalidan la respuesta derivada; cambios de narración que conservan la pregunta no la repiten. No se reinicia el motor cada frase.
 
-El historial privado conserva los fragmentos y respuestas de cada conversación sin el recorte de las versiones antiguas. El contexto enviado al modelo sigue limitado. Borrar sesión elimina ese contexto y su entrada de historial sin borrar textos elegidos. Al enviar la app al segundo plano se detienen escucha y generación; la rotación conserva la sesión y la captura; los modelos pueden seguir residentes mientras exista el proceso. La base SQLite de textos elegidos usa almacenamiento privado de la app, copias de seguridad deshabilitadas y borrado directo, sin embeddings ni índices externos. No se afirma cifrado propio adicional al almacenamiento del dispositivo ni autenticación biométrica.
+El historial privado conserva los fragmentos y respuestas de cada conversación sin el recorte de las versiones antiguas. El contexto enviado al modelo sigue limitado. Borrar sesión elimina ese contexto y su entrada de historial sin borrar textos elegidos. Con «Continuar al salir de la app» activado, la escucha y el procesamiento de preguntas continúan mediante un servicio en primer plano. Si se desactiva esa opción, salir detiene escucha y generación. La rotación conserva la sesión y la captura; los modelos pueden seguir residentes mientras exista el proceso. La base SQLite de textos elegidos usa almacenamiento privado de la app, copias de seguridad deshabilitadas y borrado directo, sin embeddings ni índices externos. No se afirma cifrado propio adicional al almacenamiento del dispositivo ni autenticación biométrica.
 
 ## Alcance actual
 

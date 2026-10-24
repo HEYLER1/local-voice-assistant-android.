@@ -27,39 +27,52 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.ViewModelProvider
 import kotlinx.coroutines.launch
 import java.util.Locale
 
 class MainActivity:ComponentActivity(){
-    private lateinit var assistant:AssistantViewModel
+    internal lateinit var assistant:AssistantViewModel
+        private set
     private var tts:TextToSpeech?=null
     private var localVoiceReady=false
     private var videoRequestPending=false
     private val speechImport=registerForActivityResult(ActivityResultContracts.OpenDocument()){uri->uri?.let{assistant.importModel(it,true)}}
     private val soniqoImport=registerForActivityResult(ActivityResultContracts.OpenDocument()){uri->uri?.let{assistant.importSoniqo(it)}}
     private val languageImport=registerForActivityResult(ActivityResultContracts.OpenDocument()){uri->uri?.let{assistant.importModel(it,false)}}
-    private val permission=registerForActivityResult(ActivityResultContracts.RequestPermission()){allowed->if(allowed)startSelectedAudio()else assistant.state.value=assistant.state.value.copy(status="Permiso de micrófono no concedido.")}
+    private val permission=registerForActivityResult(ActivityResultContracts.RequestPermission()){allowed->if(allowed)requestListening()else assistant.state.value=assistant.state.value.copy(status="Permiso de micrófono no concedido.")}
     private val videoConsent=registerForActivityResult(ActivityResultContracts.StartActivityForResult()){result->
         videoRequestPending=false
         if(result.resultCode==RESULT_OK&&result.data!=null){
-            assistant.state.value=assistant.state.value.copy(starting=true,status="Preparando audio del video…")
-            PlaybackCaptureService.onReady={projection->if(assistant.state.value.starting){assistant.resumeForeground();assistant.listen(projection)}else PlaybackCaptureService.stopCapture()}
-            PlaybackCaptureService.onStopped={assistant.pause()}
-            PlaybackCaptureService.onError={message->assistant.state.value=assistant.state.value.copy(starting=false,status=message)}
-            runCatching{startForegroundService(Intent(this,PlaybackCaptureService::class.java).putExtra("consent",result.data))}.onFailure{assistant.state.value=assistant.state.value.copy(starting=false,status="No se pudo iniciar la captura del video: ${it.message}")}
+            ListeningService.start(this,result.data)
+
         }else assistant.state.value=assistant.state.value.copy(status="Permiso de audio del video cancelado. Micrófono apagado.")
     }
-    private fun startSelectedAudio(){if(videoRequestPending)return;if(assistant.state.value.audioSource=="video"){videoRequestPending=true;videoConsent.launch(getSystemService(android.media.projection.MediaProjectionManager::class.java).createScreenCaptureIntent())}else assistant.listen()}
+    private fun startSelectedAudio(){if(videoRequestPending)return;if(assistant.state.value.audioSource=="video"){videoRequestPending=true;videoConsent.launch(getSystemService(android.media.projection.MediaProjectionManager::class.java).createScreenCaptureIntent())}else ListeningService.start(this)}
+    private val notifications=registerForActivityResult(ActivityResultContracts.RequestPermission()){startSelectedAudio()}
+    private fun requestListening(){
+        if(android.os.Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED&&!getPreferences(0).getBoolean("notice-requested",false)){
+            getPreferences(0).edit().putBoolean("notice-requested",true).apply();notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }else startSelectedAudio()
+    }
+    private val overlayPermission=registerForActivityResult(ActivityResultContracts.StartActivityForResult()){
+        val granted=android.provider.Settings.canDrawOverlays(this)
+        assistant.setFloatingControl(granted)
+        if(!granted)assistant.state.value=assistant.state.value.copy(status="Botón flotante desactivado. Puedes usar la notificación para volver o detener la escucha.")
+    }
+    private fun floatingControl(enabled:Boolean){
+        if(enabled)assistant.setBackgroundListening(true)
+        if(!enabled||android.provider.Settings.canDrawOverlays(this))assistant.setFloatingControl(enabled)
+        else runCatching{overlayPermission.launch(Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,android.net.Uri.parse("package:$packageName")))}.onFailure{assistant.state.value=assistant.state.value.copy(status="No se pudo abrir el permiso de mostrar sobre otras aplicaciones.")}
+    }
     override fun onCreate(savedInstanceState:Bundle?){
-        super.onCreate(savedInstanceState);enableEdgeToEdge(statusBarStyle=SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),navigationBarStyle=SystemBarStyle.dark(android.graphics.Color.TRANSPARENT));assistant=ViewModelProvider(this)[AssistantViewModel::class.java];assistant.restoreConversation()
+        super.onCreate(savedInstanceState);enableEdgeToEdge(statusBarStyle=SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),navigationBarStyle=SystemBarStyle.dark(android.graphics.Color.TRANSPARENT));assistant=(application as AssistantApplication).assistant;assistant.restoreConversation()
         tts=TextToSpeech(this){status->if(status==TextToSpeech.SUCCESS){val voice=tts?.voices?.firstOrNull{it.locale.language=="es"&&!it.isNetworkConnectionRequired};if(voice!=null){tts?.voice=voice;localVoiceReady=true}}}
         setContent{VoiceTheme{AssistantScreen(assistant,
-            listen={tts?.stop();if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED)startSelectedAudio()else permission.launch(Manifest.permission.RECORD_AUDIO)},
+            listen={tts?.stop();if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED)requestListening()else permission.launch(Manifest.permission.RECORD_AUDIO)},
             importSpeech={speechImport.launch(arrayOf("application/zip","application/octet-stream"))},importLanguage={languageImport.launch(arrayOf("*/*"))},
             diagnostics={assistant.releaseModels{startActivity(Intent(this,LabActivity::class.java))}},
             speak={text->if(localVoiceReady){assistant.pause();tts?.speak(text,TextToSpeech.QUEUE_FLUSH,null,"local-answer")}else assistant.state.value=assistant.state.value.copy(status="Instala una voz española sin conexión en los ajustes de Android para escuchar respuestas.")},
-            stopVoice={tts?.stop()},importSoniqo={soniqoImport.launch(arrayOf("application/zip","application/octet-stream"))})
+            stopVoice={tts?.stop()},importSoniqo={soniqoImport.launch(arrayOf("application/zip","application/octet-stream"))},floatingControl=::floatingControl)
             val s by assistant.state.collectAsState()
             DisposableEffect(s.listening||s.generating){if(s.listening||s.generating)window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);onDispose{}}
         }}
@@ -71,7 +84,7 @@ class MainActivity:ComponentActivity(){
 
 private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val text:String="",val scope:String="",val due:String="",val source:String="Texto escrito por usuario")
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable internal fun AssistantScreen(vm:AssistantViewModel,listen:()->Unit,importSpeech:()->Unit,importLanguage:()->Unit,diagnostics:()->Unit,speak:(String)->Unit,stopVoice:()->Unit,initialTab:Int=0,initialSection:Int=0,initialDrawer:Boolean=false,importSoniqo:()->Unit={}){
+@Composable internal fun AssistantScreen(vm:AssistantViewModel,listen:()->Unit,importSpeech:()->Unit,importLanguage:()->Unit,diagnostics:()->Unit,speak:(String)->Unit,stopVoice:()->Unit,initialTab:Int=0,initialSection:Int=0,initialDrawer:Boolean=false,importSoniqo:()->Unit={},floatingControl:(Boolean)->Unit=vm::setFloatingControl){
     val s by vm.state.collectAsState()
     var liveSection by rememberSaveable{mutableIntStateOf(initialSection)}
     var tab by remember{mutableIntStateOf(initialTab)}
@@ -153,6 +166,12 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
                     }
                     2->{
                         Text("Ajustes",style=MaterialTheme.typography.headlineSmall,fontWeight=androidx.compose.ui.text.font.FontWeight.SemiBold)
+                        DesignPanel("Escucha en segundo plano"){
+                            Toggle("Continuar al salir de la app",s.backgroundListening,vm::setBackgroundListening)
+                            Text("Inicia el micrófono aquí y continúa usando otras apps. La notificación permite volver al chat o detener la escucha.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                            Toggle("Botón flotante",s.floatingControl,floatingControl)
+                            Text("Aparece al salir mientras escuchas. Arrástralo para moverlo; tócalo para volver o detener. Android pedirá permiso para mostrarlo sobre otras apps.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                         DesignPanel("Respuestas online"){
                             Toggle("Usar respuestas online",s.onlineAnswers,vm::setOnlineAnswers)
                             Text(OnlineAssistant.NAME,style=MaterialTheme.typography.bodyMedium)
@@ -182,7 +201,7 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
                         }
                         DesignPanel("Fuente de audio"){
                         Row{FilterChip(selected=s.audioSource=="mic",onClick={vm.setAudioSource("mic")},label={Text("Micrófono")});Spacer(Modifier.width(8.dp));FilterChip(selected=s.audioSource=="video",onClick={vm.setAudioSource("video")},label={Text("Audio del video")})}
-                        Text("Captura el video del mismo teléfono sin usar el micrófono. Mantén ambas apps en pantalla dividida. Android solicitará permiso; algunas apps bloquean la captura.",style=MaterialTheme.typography.bodySmall)
+                        Text("Captura el video del mismo teléfono sin usar el micrófono. Con segundo plano activado puedes abrir el video en otra app. Android solicitará permiso; algunas apps bloquean la captura.",style=MaterialTheme.typography.bodySmall)
                         }
                         DesignPanel("Reconocimiento de voz"){
                         Column{FilterChip(selected=s.speechEngine=="soniqo",onClick={vm.setSpeechEngine("soniqo")},label={Text("Soniqo · Parakeet progresivo")});Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){FilterChip(selected=s.speechEngine=="moonshine",onClick={vm.setSpeechEngine("moonshine")},label={Text("Moonshine")});FilterChip(selected=s.speechEngine=="system",onClick={vm.setSpeechEngine("system")},label={Text("Android local")})}}
@@ -204,12 +223,12 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
                         }
                         DesignPanel("Privacidad y herramientas"){
                         OutlinedButton(onClick=diagnostics,enabled=!s.preparing){Text("Abrir pruebas y métricas")}
-                        Text("Funciona sin el Mac. La transcripción usa el motor de voz elegido; las respuestas y los resúmenes usan Internet. Al salir se pausa el micrófono y se cancelan las solicitudes pendientes. El historial se guarda en este dispositivo. La app no guarda audio. Puedes borrar cada conversación.")
+                        Text("Funciona sin el Mac. La transcripción usa el motor de voz elegido; las respuestas y los resúmenes usan Internet. Con segundo plano activado, la escucha continúa al salir. Detén la sesión desde la app, la burbuja o la notificación. El historial se guarda en este dispositivo. La app no guarda audio. Puedes borrar cada conversación.")
                         Text("Las explicaciones del modelo pueden equivocarse. No realizan búsquedas externas ni ejecutan órdenes del audio. Las tareas y recuerdos requieren pulsar Guardar.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
-                if(tab==2)Text("V · Android 0.22",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                if(tab==2)Text("V · Android 0.23",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

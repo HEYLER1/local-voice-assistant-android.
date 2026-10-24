@@ -1,0 +1,65 @@
+{
+  "version": "0.23-assistant",
+  "tested_at_utc": "2026-10-24T04:29:42.533897+00:00",
+  "environment": {
+    "device": "Pixel 9 Pro emulator",
+    "api": 37,
+    "abi": "arm64-v8a",
+    "physical_phone_tested": false
+  },
+  "unit_tests": {
+    "passed": 38,
+    "failed": 0
+  },
+  "instrumented_tests": {
+    "passed": 14,
+    "failed": 0,
+    "cases": [
+      "recognitionSurvivesActivityDestructionAndNotificationStopsIt",
+      "backgroundOptOutStopsRecordingAndService",
+      "floatingControlsAppearOutsideChatAndStopRecording",
+      "cancellingQueuedServiceStartDoesNotReopenMicrophone",
+      "missingConsentNeverFallsBackToMicrophone",
+      "activeBackgroundSessionStillAnalyzesQuestions",
+      "viewModelRoutesAudioQuestionsAndSummaryOnlineWithoutLoadingLocalLlm",
+      "quotaFailureDoesNotRetryOrExposeProviderBody",
+      "truncatedStreamIsNotReportedAsCompleted",
+      "cancellationCancelsTheNetworkCall",
+      "streamsOnlyAnswerAndSendsNoCredentialsOrPromptInUrl",
+      "repeatedTapsRequestKeyboardAndKeepDraft",
+      "newChatClosesLiveSessionAndCanTranscribeAgain",
+      "stoppingCancelsPendingAutomaticRecovery"
+    ]
+  },
+  "audio": {
+    "source": "Synthetic Spanish PCM fixtures 1.wav and 5.wav",
+    "recognizer": "Android on-device SpeechRecognizer",
+    "foreground_service_type": "microphone",
+    "physical_microphone_audio_tested": false
+  },
+  "validated": [
+    "New transcript segments after destroying the activity",
+    "Same active session on reopening",
+    "Stop from notification removes capture and foreground service",
+    "Background opt-out stops listening",
+    "Floating control appears outside chat and Stop removes it",
+    "Cancelled queued start opens no microphone and causes no foreground-service timeout",
+    "Missing video consent never switches to microphone",
+    "Background session still analyzes questions with a synthetic SSE reply",
+    "Keyboard drafts/focus and conversation switching regressions"
+  ],
+  "privacy": {
+    "personal_audio_used": false,
+    "cloud_answer_tests": "Mocked SSE only; no personal context sent",
+    "overlay_permission": "Temporarily enabled by emulator test and restored afterwards"
+  },
+  "limits": [
+    "No physical Galaxy A54 validation in this run",
+    "No battery, heat, duration or noisy-audio accuracy benchmark",
+    "Real media-projection audio and other manufacturers not covered by these synthetic tests"
+  ],
+  "apk": {
+    "name": "v-asistente-android-0.23.apk",
+    "sha256": "8c26d93218ab0475639d32b5a4b13c396a449c7c20730ffe11d3a869257af2c5"
+  }
+}

@@ -45,7 +45,7 @@ class ScreenSnapshotTest {
         var vm:AssistantViewModel?=null
         try{
             instrumentation.runOnMainSync{
-                vm=ViewModelProvider(activity)[AssistantViewModel::class.java]
+                vm=activity.assistant
                 checkNotNull(vm).temporaryConversation()
                 checkNotNull(vm).state.value=AssistantState(conversationKey=-17,models="Listos",history=emptyList(),localSpeechModels=localModels)
                 activity.setContent{VoiceTheme{AssistantScreen(checkNotNull(vm),{}, {}, {}, {}, {}, {})}}
@@ -76,7 +76,7 @@ class ScreenSnapshotTest {
             val landscape=checkNotNull(current()) as MainActivity
             // Recreating MainActivity restores a real chat: replace it before capturing.
             instrumentation.runOnMainSync{
-                vm=ViewModelProvider(landscape)[AssistantViewModel::class.java]
+                vm=landscape.assistant
                 checkNotNull(vm).temporaryConversation()
                 checkNotNull(vm).state.value=example
                 landscape.setContent{VoiceTheme{AssistantScreen(checkNotNull(vm),{}, {}, {}, {}, {}, {})}}
@@ -91,7 +91,7 @@ class ScreenSnapshotTest {
         instrumentation.startActivitySync(Intent(context,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         var activity=checkNotNull(current());var vm:AssistantViewModel?=null;var previous=true
         try{
-            instrumentation.runOnMainSync{vm=ViewModelProvider(activity as MainActivity)[AssistantViewModel::class.java];previous=checkNotNull(vm).state.value.autoAnswers;checkNotNull(vm).temporaryConversation();checkNotNull(vm).state.value=checkNotNull(vm).state.value.copy(saved=emptyList(),history=listOf(ConversationEntry(-1,"Geometría: el área de un círculo",0),ConversationEntry(-2,"Ideas para estudiar astronomía",0)));checkNotNull(vm).setAnswers(true)}
+            instrumentation.runOnMainSync{vm=(activity as MainActivity).assistant;previous=checkNotNull(vm).state.value.autoAnswers;checkNotNull(vm).temporaryConversation();checkNotNull(vm).state.value=checkNotNull(vm).state.value.copy(saved=emptyList(),history=listOf(ConversationEntry(-1,"Geometría: el área de un círculo",0),ConversationEntry(-2,"Ideas para estudiar astronomía",0)));checkNotNull(vm).setAnswers(true)}
             val assistant=checkNotNull(vm)
             assistant.observe(9501,"Un eclipse solar ocurre cuando la Luna pasa entre la Tierra y el Sol. Estamos estudiando astronomía y geometría.",true)
             val speech=LocalEngines(context)
