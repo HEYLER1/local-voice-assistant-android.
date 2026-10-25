@@ -1,0 +1,31 @@
+{
+  "version": "0.25.2-assistant",
+  "version_code": 32,
+  "generated_at_utc": "2026-10-25T21:22:08.735880+00:00",
+  "compiled": true,
+  "apk": "v-asistente-android-0.25.2.apk",
+  "sha256": "da1ac5680930aa6f81ecb59295c5c77ea63e09363158496f867303dadf2d4de7",
+  "instrumented_tests": {
+    "passed": 6,
+    "failed": 0,
+    "classes": [
+      "FolderInterfaceTest",
+      "SidebarOptionsTest"
+    ],
+    "checks": [
+      "Carpetas folds all folders and their contents without hiding standalone conversations",
+      "Unfolding Carpetas restores previously expanded folder contents",
+      "Conversaciones folds independently and preserves its choice after search",
+      "Search reveals matching content from folded sections",
+      "Redundant header options menu is absent",
+      "Per-chat rename, move and delete actions remain available"
+    ]
+  },
+  "changes": [
+    "Independent collapsible section headings with expanded/collapsed accessibility state",
+    "Section headings stay visible while scrolling their contents",
+    "Top options menu removed",
+    "Transcript import remains available in Ajustes → Privacidad y herramientas"
+  ],
+  "test_content": "Fictional conversations only"
+}

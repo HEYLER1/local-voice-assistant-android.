@@ -1,0 +1,47 @@
+{
+  "version": "0.25-assistant",
+  "version_code": 30,
+  "generated_at_utc": "2026-10-25T21:14:37.224333+00:00",
+  "build": {
+    "compiled": true,
+    "apk": "v-asistente-android-0.25.apk",
+    "sha256": "919809ae86793d3fa6aa70b2617b9ca52eb7c8ce4239a4186177e76bae120b7f"
+  },
+  "unit_tests": {
+    "tests": 43,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "instrumented_tests": {
+    "device": "Android emulator API 37",
+    "passed": 8,
+    "failed": 0,
+    "classes": [
+      "FolderInterfaceTest",
+      "SidebarOptionsTest",
+      "ConversationFolderTest"
+    ],
+    "checks": [
+      "Projects expand and collapse with nested classes",
+      "Create class callback retains its chosen project",
+      "Opening a class uses its saved conversation ID",
+      "Search starts hidden, focuses when opened and searches collapsed projects",
+      "Closing search clears query and restores previous project expansion",
+      "Current project expands automatically; empty project can start its first class",
+      "Rename, move and delete chat menus do not open the chat accidentally",
+      "Moving conversations survives autosave; deleting a project preserves its content",
+      "Database version 1 migration preserves prior transcripts and summary"
+    ]
+  },
+  "screenshot": "assets/v-projects-synthetic.png",
+  "privacy": {
+    "fixture_content": "fictional classes and interviews",
+    "user_conversation_data_deleted": false,
+    "provider_requests_for_ui_verification": false
+  },
+  "scope": "Navigation and visual organization; transcription and question model unchanged",
+  "pending": [
+    "Physical phone visual verification"
+  ]
+}

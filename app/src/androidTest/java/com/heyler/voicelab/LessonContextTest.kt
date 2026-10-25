@@ -26,7 +26,7 @@ class LessonContextTest{
     }
     @Test fun classQuestionUsesContextAndDoesNotUploadSavedLibrary()=runBlocking{
         val prefs=context.getSharedPreferences("assistant-options",0)
-        val oldOnline=prefs.getBoolean("online-answers",true);val oldAnswers=prefs.getBoolean("answers",true)
+        val oldOnline=prefs.getBoolean("online-answers",true);val oldAnswers=prefs.getBoolean("answers",true);val oldSummary=prefs.getBoolean("summary",true)
         val vm=AssistantViewModel(context.applicationContext as Application);val holder=ViewModelStore();holder.put("lesson",vm)
         val sent=java.util.concurrent.CopyOnWriteArrayList<String>()
         vm.online=OnlineAssistant(OkHttpClient.Builder().addInterceptor{chain->
@@ -37,7 +37,7 @@ class LessonContextTest{
         var savedId:Long?=null
         suspend fun waitFor(check:()->Boolean){withTimeout(10000){while(!check())delay(25)}}
         try{
-            vm.temporaryConversation();vm.setOnlineAnswers(true);vm.setAnswers(false)
+            vm.requestSpacingMs=0;vm.temporaryConversation();vm.setOnlineAnswers(true);vm.setAnswers(false);vm.setSummary(false)
             vm.save(null,"Recuerdo","SYNTHETIC_LIBRARY_NOT_FOR_UPLOAD_22022","","team fixture")
             savedId=vm.state.value.saved.first{it.text=="SYNTHETIC_LIBRARY_NOT_FOR_UPLOAD_22022"}.id
             vm.observe(1,"Hoy vamos a estudiar la cinemática. Como tarea para el viernes, resolver los ejercicios de velocidad de la guía.",true)
@@ -54,7 +54,7 @@ class LessonContextTest{
             assertTrue(sent.none{it.contains("SYNTHETIC_LIBRARY_NOT_FOR_UPLOAD")})
         }finally{
             savedId?.let{vm.delete(it)};vm.background();holder.clear()
-            prefs.edit().putBoolean("online-answers",oldOnline).putBoolean("answers",oldAnswers).apply()
+            prefs.edit().putBoolean("online-answers",oldOnline).putBoolean("answers",oldAnswers).putBoolean("summary",oldSummary).apply()
         }
     }
 }

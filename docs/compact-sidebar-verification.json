@@ -1,0 +1,31 @@
+{
+  "version": "0.25.1-assistant",
+  "version_code": 31,
+  "generated_at_utc": "2026-10-25T21:18:52.137997+00:00",
+  "compiled": true,
+  "installed_on": "emulator-5554",
+  "apk": "v-asistente-android-0.25.1.apk",
+  "sha256": "b8f3e71f9d315d780f62224edef56c89d6a579b94c6329e60301a22940066bc6",
+  "instrumented_tests": {
+    "passed": 6,
+    "failed": 0,
+    "classes": [
+      "FolderInterfaceTest",
+      "SidebarOptionsTest"
+    ],
+    "content": "Fictional conversations only"
+  },
+  "changes": [
+    "Carpetas replaces Proyectos in navigation and folder dialogs",
+    "Nueva conversación replaces Nueva clase",
+    "Name fields have no example text",
+    "Permanent sidebar helper text removed",
+    "Conversation rows and their option controls use 40 dp instead of 48 dp rows",
+    "Existing palette, saved conversations and nested organization preserved"
+  ],
+  "visual_review": {
+    "screenshot": "assets/v-folders-compact-synthetic.png",
+    "reviewed": true
+  },
+  "scope": "Cosmetic changes and terminology; no changes to recognition, model calls or storage schema"
+}

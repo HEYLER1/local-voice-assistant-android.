@@ -1,11 +1,11 @@
 package com.heyler.voicelab
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -15,109 +15,89 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.*
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable fun LiveConversation(s:AssistantState,onEdit:(SpeechLine)->Unit,onSave:(String,String)->Unit,onSpeak:(String)->Unit,onSummary:()->Unit,onClear:()->Unit,onStop:()->Unit,onSettings:()->Unit,modifier:Modifier=Modifier,section:Int=0,onSection:(Int)->Unit={},preferredAnswerId:String?=null){
-    val compact=LocalConfiguration.current.screenHeightDp<480
-    val scroll=rememberScrollState()
     var selectedId by rememberSaveable{mutableStateOf<String?>(null)}
     LaunchedEffect(preferredAnswerId){if(preferredAnswerId!=null)selectedId=preferredAnswerId}
     LaunchedEffect(s.answers.firstOrNull()?.id){if(selectedId==null)selectedId=s.answers.firstOrNull()?.id}
     val selected=s.answers.find{it.id==selectedId}?:s.answers.firstOrNull()
-    val scope=rememberCoroutineScope()
-    val openAnswer:(String)->Unit={selectedId=it;onSection(1);scope.launch{scroll.animateScrollTo(0)}}
-    Column(modifier.fillMaxSize().verticalScroll(scroll).padding(horizontal=20.dp).padding(top=8.dp,bottom=24.dp),verticalArrangement=Arrangement.spacedBy(if(compact)8.dp else 18.dp)){
+    val openAnswer:(String)->Unit={selectedId=it;onSection(1)}
+    if(section==0){
+        val context=LocalContext.current
+        val clipboard=remember(context){context.getSystemService(android.content.ClipboardManager::class.java)}
+        TranscriptWorkspace(s,openAnswer,{text->
+            val clip=android.content.ClipData.newPlainText("Transcripción",text).apply{
+                description.extras=android.os.PersistableBundle().apply{putBoolean(android.content.ClipDescription.EXTRA_IS_SENSITIVE,true)}
+            }
+            clipboard?.setPrimaryClip(clip)
+        },modifier)
+        return
+    }
+    if(section==1){
+        QuestionsWorkspace(s,selected?.id,{selectedId=it},onSpeak,onSave,modifier,preferredAnswerId){
+            ConversationNotices(s,onSummary,onStop,onSettings)
+        }
+        return
+    }
+    StudySummaryPanel(s,openAnswer,onEdit,onSave,onSummary,modifier.fillMaxSize())
+}
+@Composable private fun ConversationNotices(s:AssistantState,onSummary:()->Unit,onStop:()->Unit,onSettings:()->Unit){
+    val missingModels=(s.speechEngine=="moonshine"&&s.models.contains("Voz: importar"))||(s.speechEngine=="soniqo"&&s.models.contains("Soniqo: importar"))||(!s.transcriptionOnly&&s.models.contains("Respuestas: importar"))
+    val hasError=s.status.startsWith("No se pudo")||s.status.startsWith("Permiso")||s.status.startsWith("Instala una voz")||s.status.startsWith("Espera a")
+    if(!s.analysisRunning&&s.onlineNotice.isBlank()&&!s.generating&&!s.starting&&!missingModels&&!hasError)return
+    Column(verticalArrangement=Arrangement.spacedBy(6.dp)){
+        if(s.analysisRunning)Text("Organizando el bloque: temas, preguntas y apuntes…",color=VoiceAccent,style=MaterialTheme.typography.bodySmall)
+        if(s.onlineNotice.isNotBlank())Column(verticalArrangement=Arrangement.spacedBy(4.dp)){
+            Text(s.onlineNotice,color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.bodySmall)
+            TextButton(onClick=onSummary,enabled=!s.generating){Text("Reintentar análisis")}
+        }
         if(s.generating)TextButton(onClick=onStop){Text("Detener respuesta")}
         if(s.starting)Text(s.status,color=VoiceAccent)
-        if((s.speechEngine=="moonshine"&&s.models.contains("Voz: importar"))||(s.speechEngine=="soniqo"&&s.models.contains("Soniqo: importar"))||(!s.transcriptionOnly&&s.models.contains("Respuestas: importar")))Surface(color=Color.Transparent){Column(Modifier.padding(vertical=8.dp)){Text("Prepara tu asistente",fontWeight=FontWeight.SemiBold);Text(s.models,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant);TextButton(onClick=onSettings){Text("Configurar modelos")}}}
-        if(s.status.startsWith("No se pudo")||s.status.startsWith("Permiso")||s.status.startsWith("Instala una voz")||s.status.startsWith("Espera a"))Text(s.status,color=MaterialTheme.colorScheme.error)
-        if(section==0&&s.lines.isEmpty()&&s.answers.isEmpty())EmptyConversation()
-        else if(section==0)BoxWithConstraints(Modifier.fillMaxWidth()){
-            val latest=selected
-            if(maxWidth>=600.dp)Row(horizontalArrangement=Arrangement.spacedBy(18.dp)){
-                Column(Modifier.weight(1f)){TranscriptPanel(s,onEdit,onSave,openAnswer)}
-                Column(Modifier.weight(1f)){if(latest!=null)AnswerPanel(latest,onSpeak,onSave)else WaitingForQuestion(s.autoAnswers)}
-            }else Column(verticalArrangement=Arrangement.spacedBy(18.dp)){
-                if(latest!=null)Column(Modifier.fillMaxWidth().clickable{openAnswer(latest.id)}.padding(vertical=8.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
-                        Row{Text("RESPUESTA EN VIVO",style=MaterialTheme.typography.labelSmall,color=VoiceAccent,modifier=Modifier.weight(1f));Text("Abrir →",style=MaterialTheme.typography.labelSmall,color=VoiceAccent)}
-                        Text(latest.question,maxLines=2,overflow=TextOverflow.Ellipsis,fontWeight=FontWeight.SemiBold)
-                        Text(ReadableAnswer.format(latest.text).ifBlank{latest.status},maxLines=3,overflow=TextOverflow.Ellipsis,color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.bodyMedium)
-                    HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant,modifier=Modifier.padding(top=8.dp))
-                }
-                TranscriptPanel(s,onEdit,onSave,openAnswer)
-                if(latest==null)WaitingForQuestion(s.autoAnswers)
-            }
-        }
-        if(section==1&&s.answers.isNotEmpty()){
-            if(compact)Row(horizontalArrangement=Arrangement.spacedBy(16.dp)){
-                Box(Modifier.weight(1f)){QuestionList(s.answers,selected?.id,openAnswer)}
-                Box(Modifier.weight(1f)){selected?.let{AnswerPanel(it,onSpeak,onSave)}}
-            }else{
-                QuestionList(s.answers,selected?.id,openAnswer)
-                selected?.let{AnswerPanel(it,onSpeak,onSave)}
-            }
-        }
-        if(section==1&&s.answers.isEmpty())WaitingForQuestion(s.autoAnswers)
-        if(section==2&&s.lines.isNotEmpty()){
-            StudySummaryPanel(s,openAnswer,onEdit,onSave,onSummary)
-        }
-        if(section==2&&s.lines.isEmpty())Text("Graba tu clase para reunir aquí el resumen y los apuntes de estudio.",color=MaterialTheme.colorScheme.onSurfaceVariant)
+        if(missingModels)Surface(color=Color.Transparent){Column(Modifier.padding(vertical=8.dp)){Text("Prepara tu asistente",fontWeight=FontWeight.SemiBold);Text(s.models,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant);TextButton(onClick=onSettings){Text("Configurar modelos")}}}
+        if(hasError)Text(s.status,color=MaterialTheme.colorScheme.error)
     }
 }
-@Composable private fun EmptyConversation(){
-    Column(Modifier.fillMaxWidth().padding(top=72.dp,bottom=40.dp),horizontalAlignment=Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(14.dp)){
-        androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(R.drawable.brand_mark),contentDescription="V · voz y conocimiento",modifier=Modifier.size(64.dp))
-        Text("¿Qué vamos a descubrir?",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.SemiBold)
-        Text("Habla o escribe. V reúne tus ideas.",style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-@Composable private fun WaitingForQuestion(enabled:Boolean){Text(if(enabled)"Las preguntas relevantes aparecerán aquí."else "Las respuestas del audio están desactivadas en Ajustes.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(vertical=8.dp))}
-@Composable private fun TranscriptPanel(s:AssistantState,onEdit:(SpeechLine)->Unit,onSave:(String,String)->Unit,onAnswer:(String)->Unit){
-    var editing by remember{mutableStateOf(false)}
-    var follow by remember{mutableStateOf(true)}
-    val textScroll=rememberScrollState()
-    val literal=s.lines.joinToString(" "){it.text}
-    LaunchedEffect(literal,follow){if(follow)textScroll.animateScrollTo(textScroll.maxValue)}
-    Column(Modifier.fillMaxWidth().padding(vertical=8.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){
-        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){Text("Transcripción",fontWeight=FontWeight.SemiBold,modifier=Modifier.weight(1f));Text(if(s.listening)"● EN VIVO"else "PAUSADA",style=MaterialTheme.typography.labelSmall,color=if(s.listening)VoiceGreen else MaterialTheme.colorScheme.onSurfaceVariant)}
-        Column(Modifier.heightIn(max=420.dp).verticalScroll(textScroll)){
-            if(s.voiceLabels)s.lines.forEach{line->Text(line.voice,style=MaterialTheme.typography.labelMedium,color=VoiceAccent);SelectionContainer{Text(linkedTranscript(line.text,s.answers,onAnswer),lineHeight=26.sp,fontSize=16.sp)};Spacer(Modifier.height(12.dp))}
-            else SelectionContainer{Text(linkedTranscript(literal,s.answers,onAnswer),lineHeight=27.sp,fontSize=16.sp,color=Color(0xFFE1E5F0))}
-        }
-        if(NumericMentions.spans(literal).isNotEmpty())Text("Cifras resaltadas · compruébalas con el audio",style=MaterialTheme.typography.labelSmall,color=Color(0xFFEBC189))
-        Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){TextButton(onClick={editing=!editing},contentPadding=PaddingValues(0.dp)){Text(if(editing)"Cerrar edición"else "Editar / guardar")};TextButton(onClick={follow=!follow},contentPadding=PaddingValues(0.dp)){Text(if(follow)"Siguiendo audio"else "Seguir audio",color=MaterialTheme.colorScheme.onSurfaceVariant)}}
-        if(editing)Column(Modifier.heightIn(max=300.dp).verticalScroll(rememberScrollState())){s.lines.forEach{line->Text(line.text,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant);Row{TextButton(onClick={onEdit(line)}){Text("Editar")};TextButton(onClick={onSave(line.text,"Transcripción seleccionada por usuario")}){Text("Guardar")}}}}
-    }
-}
-@Composable private fun AnswerPanel(a:LiveAnswer,onSpeak:(String)->Unit,onSave:(String,String)->Unit){
+@Composable private fun WaitingForQuestion(enabled:Boolean){Text(if(enabled)"Sin preguntas todavía."else "Activa las respuestas del audio en Ajustes.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(vertical=8.dp))}
+@Composable private fun AnswerPanel(a:LiveAnswer,onSpeak:(String)->Unit,onSave:(String,String)->Unit,showQuestion:Boolean=true){
     val compact=LocalConfiguration.current.screenHeightDp<480
     val active=a.status=="En espera"||a.status.startsWith("Preparando")||a.status.startsWith("Respondiendo")
-    Column(Modifier.fillMaxWidth().padding(vertical=8.dp),verticalArrangement=Arrangement.spacedBy(if(compact)8.dp else 12.dp)){
-        Row(verticalAlignment=Alignment.CenterVertically){VoiceGlyph("spark",VoiceAccent,Modifier.size(18.dp));Spacer(Modifier.width(8.dp));Text(if(a.source==null)"TU CONSULTA"else "PREGUNTA DEL AUDIO",color=VoiceAccent,style=MaterialTheme.typography.labelSmall,fontWeight=FontWeight.Bold);Spacer(Modifier.weight(1f));if(active)CircularProgressIndicator(Modifier.size(16.dp),strokeWidth=2.dp,color=VoiceAccent)}
-        Text(a.question,fontWeight=FontWeight.SemiBold,fontSize=if(compact)16.sp else 18.sp,lineHeight=if(compact)22.sp else 25.sp,maxLines=if(compact)2 else 4,overflow=TextOverflow.Ellipsis)
+    var evidenceOpen by rememberSaveable(a.id){mutableStateOf(false)}
+    Column(Modifier.fillMaxWidth().padding(vertical=if(showQuestion)8.dp else 4.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
+        Row(verticalAlignment=Alignment.CenterVertically){VoiceGlyph("spark",VoiceAccent,Modifier.size(18.dp));Spacer(Modifier.width(8.dp));Text(if(a.suggested)"SUGERIDA PARA REPASAR"else if(a.source==null)"TU CONSULTA"else if(showQuestion)"PREGUNTA DEL AUDIO · CONTEXTUALIZADA"else "DEL AUDIO",modifier=Modifier.weight(1f),color=VoiceAccent,style=MaterialTheme.typography.labelSmall,fontWeight=FontWeight.Bold);if(active)CircularProgressIndicator(Modifier.size(16.dp),strokeWidth=2.dp,color=VoiceAccent)}
+        if(showQuestion)Text(a.question,fontWeight=FontWeight.SemiBold,fontSize=if(compact)16.sp else 18.sp,lineHeight=if(compact)22.sp else 25.sp,maxLines=if(compact)2 else 4,overflow=TextOverflow.Ellipsis)
+        if(showQuestion&&a.evidence.isNotBlank())Text("Fuente: «${a.evidence}»",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
         if(a.text.isNotBlank())SelectionContainer{Text(ReadableAnswer.format(a.text),lineHeight=if(compact)22.sp else 26.sp,fontSize=if(compact)15.sp else 16.sp,color=Color(0xFFE6E0F4))}
         else Text(if(a.status=="En espera")"Pregunta detectada. Preparando respuesta…"else a.status,color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.bodyMedium)
         if(a.text.isNotBlank()){
             if(active)Text("Respondiendo en vivo…",color=VoiceAccent,style=MaterialTheme.typography.labelSmall)
             else Text(if(a.status.startsWith("Lista"))if(a.status.contains("online"))"Respuesta online · sin verificación externa"else "Respuesta guardada · sin verificación externa"else a.status,style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-            a.firstTextMs?.let{Text("Primer texto · %.1f s".format(it/1000),style=MaterialTheme.typography.labelSmall,color=VoiceAccent)}
-            Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){TextButton(onClick={onSpeak(a.text)},contentPadding=PaddingValues(horizontal=0.dp,vertical=6.dp)){Text("Escuchar")};TextButton(onClick={onSave(a.text,if(a.status.contains("online"))"Respuesta online, revisar antes de guardar"else "Respuesta guardada, revisar antes de guardar")}){Text("Guardar")}}
+            if(showQuestion)a.firstTextMs?.let{Text("Primer texto · %.1f s".format(it/1000),style=MaterialTheme.typography.labelSmall,color=VoiceAccent)}
+            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){
+                TextButton(onClick={onSpeak(a.text)},contentPadding=PaddingValues(horizontal=4.dp,vertical=4.dp)){Text("Escuchar")}
+                TextButton(onClick={onSave(a.text,if(a.status.contains("online"))"Respuesta online, revisar antes de guardar"else "Respuesta guardada, revisar antes de guardar")},contentPadding=PaddingValues(horizontal=4.dp,vertical=4.dp)){Text("Guardar")}
+                if(!showQuestion&&a.evidence.isNotBlank())TextButton(onClick={evidenceOpen=!evidenceOpen},contentPadding=PaddingValues(horizontal=4.dp,vertical=4.dp),modifier=Modifier.semantics{stateDescription=if(evidenceOpen)"Expandida"else "Contraída"}){Text("Fuente",color=if(evidenceOpen)VoiceAccent else MaterialTheme.colorScheme.onSurfaceVariant)}
+            }
         }
+        if(!showQuestion&&evidenceOpen&&a.evidence.isNotBlank())Text("Fuente: «${a.evidence}»",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
-private fun linkedTranscript(text:String,answers:List<LiveAnswer>,open:(String)->Unit):AnnotatedString = buildAnnotatedString {
+internal fun linkedTranscript(text:String,answers:List<LiveAnswer>,open:(String)->Unit):AnnotatedString = buildAnnotatedString {
     append(text)
     NumericMentions.spans(text).forEach{range->addStyle(SpanStyle(background=Color(0xFF514128)),range.first,range.last+1)}
     val occupied=mutableListOf<IntRange>()
     answers.filter{it.source!=null}.forEach{answer->
-        val words=answer.question.trim('¿','?').split(Regex("\\s+"))
+        val words=answer.evidence.ifBlank{answer.question}.trim('¿','?').split(Regex("\\s+"))
         val pattern=words.joinToString("[\\s¿?,.!]*"){Regex.escape(it)}
         Regex(pattern,RegexOption.IGNORE_CASE).findAll(text).forEach{match->
             if(occupied.none{it.first<=match.range.last&&match.range.first<=it.last}){
@@ -128,14 +108,67 @@ private fun linkedTranscript(text:String,answers:List<LiveAnswer>,open:(String)-
     }
 }
 
-@Composable private fun QuestionList(answers:List<LiveAnswer>,selected:String?,open:(String)->Unit){
-    Column(Modifier.heightIn(max=190.dp).verticalScroll(rememberScrollState())){
-        answers.forEachIndexed{index,a->
-            Row(Modifier.fillMaxWidth().clickable{open(a.id)}.padding(vertical=10.dp),horizontalArrangement=Arrangement.spacedBy(12.dp)){
-                Text("${index+1}",style=MaterialTheme.typography.labelLarge,color=VoiceAccent)
-                Column(Modifier.weight(1f)){Text(a.question,maxLines=2,overflow=TextOverflow.Ellipsis,style=MaterialTheme.typography.bodyMedium,color=if(a.id==selected)VoiceAccent else MaterialTheme.colorScheme.onSurface);Text(a.status.substringBefore("·").trim(),style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant,maxLines=1,overflow=TextOverflow.Ellipsis)}
+@Composable private fun QuestionsWorkspace(
+    s:AssistantState,
+    selected:String?,
+    select:(String)->Unit,
+    onSpeak:(String)->Unit,
+    onSave:(String,String)->Unit,
+    modifier:Modifier,
+    preferredAnswerId:String?,
+    notices:@Composable ()->Unit
+){
+    var suggested by rememberSaveable{mutableStateOf(s.answers.firstOrNull{it.id==selected}?.suggested?:false)}
+    var collapsed by rememberSaveable{mutableStateOf<String?>(null)}
+    val visible=s.answers.filter{it.suggested==suggested}
+    val conversationList=rememberLazyListState(initialFirstVisibleItemIndex=s.answers.filter{!it.suggested}.indexOfFirst{it.id==selected}.let{if(it>0)it+1 else 0})
+    val reviewList=rememberLazyListState(initialFirstVisibleItemIndex=s.answers.filter{it.suggested}.indexOfFirst{it.id==selected}.let{if(it>0)it+1 else 0})
+    val list=if(suggested)reviewList else conversationList
+    LaunchedEffect(preferredAnswerId,selected){
+        if(preferredAnswerId!=null&&selected==preferredAnswerId){
+            s.answers.firstOrNull{it.id==preferredAnswerId}?.let{answer->
+                suggested=answer.suggested;collapsed=null
+                val index=s.answers.filter{it.suggested==answer.suggested}.indexOfFirst{it.id==answer.id}
+                (if(answer.suggested)reviewList else conversationList).scrollToItem(index+1)
             }
-            HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant)
+        }
+    }
+    Column(modifier.fillMaxSize().padding(horizontal=12.dp)){
+        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 40.dp){
+            Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(8.dp)){
+                TextButton(onClick={suggested=false},modifier=Modifier.weight(1f),contentPadding=PaddingValues(horizontal=4.dp,vertical=0.dp)){
+                    Text("Conversación",color=if(!suggested)VoiceAccent else MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                TextButton(onClick={suggested=true},modifier=Modifier.weight(1f),contentPadding=PaddingValues(horizontal=4.dp,vertical=0.dp)){
+                    Text("Para repasar",color=if(suggested)VoiceAccent else MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            LazyColumn(Modifier.weight(1f).fillMaxWidth().semantics{contentDescription="Preguntas y respuestas"},state=list,contentPadding=PaddingValues(bottom=12.dp)){
+                item(key="notices"){notices()}
+                if(visible.isEmpty())item(key="empty"){
+                    if(s.answers.isEmpty())WaitingForQuestion(s.autoAnswers)
+                    else Text(if(suggested)"No hay preguntas para repasar todavía."else "No hay preguntas en esta conversación todavía.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(vertical=8.dp))
+                }
+                itemsIndexed(visible,key={_,answer->answer.id}){index,answer->
+                    val expanded=answer.id==selected&&collapsed!=answer.id
+                    val number=index+1
+                    Column(Modifier.fillMaxWidth()){
+                        Row(Modifier.fillMaxWidth().clickable{
+                            if(answer.id==selected)collapsed=if(collapsed==answer.id)null else answer.id
+                            else{collapsed=null;select(answer.id)}
+                        }.semantics{stateDescription=if(expanded)"Respuesta expandida"else "Respuesta contraída"}.padding(vertical=8.dp),horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.Top){
+                            Text(number.toString(),style=MaterialTheme.typography.labelLarge,color=VoiceAccent,modifier=Modifier.padding(top=2.dp))
+                            Column(Modifier.weight(1f)){
+                                Text(answer.question,maxLines=if(expanded)Int.MAX_VALUE else 2,overflow=TextOverflow.Ellipsis,style=MaterialTheme.typography.bodyLarge,fontWeight=if(expanded)FontWeight.Medium else FontWeight.Normal,color=if(expanded)VoiceAccent else MaterialTheme.colorScheme.onSurface)
+                                if(!expanded&&!answer.status.startsWith("Lista"))Text(answer.status.substringBefore("·").trim(),style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant,maxLines=1,overflow=TextOverflow.Ellipsis)
+                            }
+                            Text(if(expanded)"▾"else "▸",color=MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        if(expanded)AnswerPanel(answer,onSpeak,onSave,showQuestion=false)
+                        HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant)
+                    }
+                }
+            }
         }
     }
 }

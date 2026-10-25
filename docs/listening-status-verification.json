@@ -1,0 +1,27 @@
+{
+  "version": "0.25.4-assistant",
+  "version_code": 34,
+  "generated_at_utc": "2026-10-25T22:07:16.940460+00:00",
+  "compiled": true,
+  "apk": "v-asistente-android-0.25.4.apk",
+  "sha256": "81a465ce465e4dfc347303bfd5163b03b31cb0ee490b675564122078b5c3db01",
+  "instrumented_tests": {
+    "passed": 2,
+    "failed": 0,
+    "elapsed_seconds": 22.033,
+    "cases": [
+      "recognitionSurvivesActivityDestructionAndNotificationStopsIt",
+      "backgroundOptOutStopsRecordingAndService"
+    ],
+    "checks": [
+      "Foreground notification does not call listening background",
+      "Notification changes when leaving the activity",
+      "New synthetic PCM phrase is transcribed after activity destruction",
+      "Returning to V keeps session and resets the notification wording",
+      "Notification Stop releases listening and service",
+      "Background opt-out stops capture when leaving V"
+    ]
+  },
+  "scope": "Corrects startup, notification-channel and notification wording; capture lifecycle unchanged",
+  "test_content": "Existing synthetic Spanish PCM fixtures; no personal recording"
+}

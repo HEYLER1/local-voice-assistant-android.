@@ -26,7 +26,7 @@ class ListeningService:Service(){
         if(intent==null){stopSelf(startId);return START_NOT_STICKY}
         try{
             val manager=getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(NotificationChannel(CHANNEL,"Escucha en segundo plano",NotificationManager.IMPORTANCE_LOW).apply{description="Controles de la grabación activa de V";setSound(null,null)})
+            manager.createNotificationChannel(NotificationChannel(CHANNEL,"Escucha activa",NotificationManager.IMPORTANCE_LOW).apply{description="Controles de la grabación activa de V";setSound(null,null)})
             val consent=parcelable(intent,"consent",Intent::class.java)
             startForeground(NOTICE,notification("Preparando transcripción…"),if(consent==null)ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
             // Acknowledge every foreground start, including a start cancelled before delivery.
@@ -50,13 +50,13 @@ class ListeningService:Service(){
                 assistant.state.map{SessionUi(it.listening,it.starting,it.appVisible,it.floatingControl,it.backgroundListening)}.distinctUntilChanged().collect{s->
                     if(!s.listening&&!s.starting){finish();return@collect}
                     if(!s.visible&&!s.background){assistant.background();return@collect}
-                    manager.notify(NOTICE,notification(if(s.listening)"Transcribiendo · toca para abrir el chat"else "Preparando transcripción…"))
+                    manager.notify(NOTICE,notification(if(!s.listening)"Preparando transcripción…"else if(s.visible)"Transcribiendo · toca para abrir el chat"else "Transcribiendo en segundo plano · toca para volver"))
                     bubble?.show(!s.visible&&s.background&&s.floating,s.starting)
                 }
             }
         }catch(e:Throwable){
             assistant.stopFromNotification()
-            assistant.state.value=assistant.state.value.copy(status="No se pudo iniciar la escucha en segundo plano: ${e.message}")
+            assistant.state.value=assistant.state.value.copy(status="No se pudo iniciar la escucha: ${e.message}")
             finish()
         }
         return START_NOT_STICKY
@@ -99,7 +99,7 @@ class ListeningService:Service(){
             if(vm.state.value.listening||vm.state.value.starting||vm.state.value.preparing)return
             if(vm.state.value.audioSource=="video"&&consent==null){vm.state.value=vm.state.value.copy(status="Falta el permiso de captura del video. No se activó el micrófono.");return}
             requested=true;request++;pendingAudio=source?.let{ParcelFileDescriptor.dup(it.fileDescriptor)}
-            vm.state.value=vm.state.value.copy(starting=true,status="Preparando escucha en segundo plano…")
+            vm.state.value=vm.state.value.copy(starting=true,status=if(vm.state.value.audioSource=="video")"Preparando audio del video…"else "Iniciando micrófono…")
             try{context.startForegroundService(Intent(context,ListeningService::class.java).putExtra("request",request).putExtra("audio-source",vm.state.value.audioSource).putExtra("consent",consent))}
             catch(e:Throwable){requested=false;runCatching{pendingAudio?.close()};pendingAudio=null;vm.state.value=vm.state.value.copy(starting=false,status="No se pudo iniciar la escucha: ${e.message}")}
         }

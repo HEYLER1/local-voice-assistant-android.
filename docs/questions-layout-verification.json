@@ -1,0 +1,41 @@
+{
+  "version": "0.25.3-assistant",
+  "version_code": 33,
+  "generated_at_utc": "2026-10-25T22:02:01.770802+00:00",
+  "build": {
+    "compiled": true,
+    "apk": "v-asistente-android-0.25.3.apk",
+    "sha256": "8d6295c1c6b702008d539b9ff3025380ff85ebdab46578e62edf9b11c4e1a445",
+    "installed_on": "emulator-5554"
+  },
+  "instrumented_tests": {
+    "passed": 7,
+    "failed": 0,
+    "classes": [
+      "FolderInterfaceTest",
+      "SidebarOptionsTest"
+    ],
+    "new_check": "Answer titles appear once, source evidence expands on request, selection survives another incoming question, answers can collapse and reopen"
+  },
+  "changes": [
+    "Folder rows are indented 16 dp from their section; nested conversation rows start 48 dp in",
+    "Questions use full-height virtualized scrolling rather than a fixed-height list plus separate detail",
+    "Answers expand underneath their question without repeating its title",
+    "Question view side margins reduced from 20 to 12 dp",
+    "Source quote opens on demand; no first-token timing row in expanded answers",
+    "Conversation and study questions remain separate; answer state and save/listen actions retained"
+  ],
+  "visual_review": {
+    "reviewed": true,
+    "screenshots": [
+      "assets/v-inline-questions-synthetic.png",
+      "assets/v-hierarchical-folders-synthetic.png"
+    ]
+  },
+  "privacy": {
+    "content": "Fictional classes and questions only",
+    "user_data_deleted": false,
+    "provider_requests_for_tests": false
+  },
+  "scope": "Interface layout and local selection state; recognition and model processing unchanged"
+}

@@ -85,7 +85,8 @@ class OnlineAssistantTest{
         val store=ViewModelStore();store.put("background-online-test",vm)
         try{
             vm.temporaryConversation();vm.setOnlineAnswers(true);vm.setAnswers(true);vm.setTranscriptionOnly(false);vm.setBackgroundListening(true)
-            vm.online=OnlineAssistant(OkHttpClient.Builder().addInterceptor{chain->response(chain.request(),stream("La Luna pasa entre la Tierra y el Sol."))}.build())
+            vm.requestSpacingMs=0
+            vm.online=OnlineAssistant(OkHttpClient.Builder().addInterceptor{chain->response(chain.request(),stream(AnalysisFixtures.eclipse()))}.build())
             vm.setBackgroundServiceActive(true);vm.background()
             assertFalse(vm.state.value.appVisible)
             vm.observe(2710,"En esta clase de astronomía estudiamos los eclipses solares. ¿Por qué ocurre un eclipse solar?",true)
@@ -103,7 +104,8 @@ class OnlineAssistantTest{
         val oldOnline=preferences.getBoolean("online-answers",true);val oldAnswers=preferences.getBoolean("answers",true);val oldOnly=preferences.getBoolean("transcription-only",false)
         val vm=AssistantViewModel(context.applicationContext as Application);val store=ViewModelStore();store.put("online-test",vm)
         val calls=AtomicInteger()
-        vm.online=OnlineAssistant(OkHttpClient.Builder().addInterceptor{chain->calls.incrementAndGet();response(chain.request(),stream("La Luna pasa entre la Tierra y el Sol."))}.build())
+        vm.requestSpacingMs=0
+        vm.online=OnlineAssistant(OkHttpClient.Builder().addInterceptor{chain->calls.incrementAndGet();response(chain.request(),stream(AnalysisFixtures.eclipse()))}.build())
         suspend fun waitFor(check:()->Boolean){withTimeout(8000){while(!check())delay(30)}}
         try{
             vm.temporaryConversation();vm.setOnlineAnswers(true);vm.setAnswers(true);vm.setTranscriptionOnly(false)
@@ -111,7 +113,7 @@ class OnlineAssistantTest{
             waitFor{vm.state.value.answers.any{it.status.startsWith("Lista")}}
             assertEquals(1,calls.get());assertFalse(vm.state.value.languageReady)
             assertTrue(vm.state.value.answers.single().text.contains("Luna"))
-            vm.requestSummary();waitFor{vm.state.value.summary.isNotBlank()}
+            vm.requestSummary();waitFor{calls.get()==2&&!vm.state.value.generating}
             assertEquals(2,calls.get())
             val previousSummary=vm.state.value.summary
             vm.online=OnlineAssistant(OkHttpClient.Builder().addInterceptor{chain->calls.incrementAndGet();response(chain.request(),"quota fixture",429)}.build())

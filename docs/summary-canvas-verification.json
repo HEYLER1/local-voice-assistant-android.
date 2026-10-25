@@ -1,0 +1,58 @@
+{
+  "version": "0.26-assistant",
+  "version_code": 35,
+  "generated_at_utc": "2026-10-25T22:21:12.547889+00:00",
+  "build": {
+    "compiled": true,
+    "apk": "v-asistente-android-0.26.apk",
+    "sha256": "0f4e80850b510ee481c9023dc7ade1b8e5846fe680ac363b8bd96b43069dc923",
+    "installed_on": "emulator-5554"
+  },
+  "instrumented_tests": {
+    "passed": 10,
+    "failed": 0,
+    "elapsed_seconds": 20.874,
+    "classes": [
+      "SummaryCanvasTest",
+      "StudySummaryTest",
+      "FolderInterfaceTest"
+    ],
+    "checks": [
+      "One-finger canvas movement, zoom buttons and reset",
+      "Fullscreen canvas opens and returns to the inline view",
+      "Nodes open source-backed notes from either view",
+      "Sources retain original transcript IDs",
+      "Task branch preserves the literal deadline and user-chosen save",
+      "Topic node opens synthesis and allows saving it",
+      "Review hides answers until explicitly revealed",
+      "Existing task/exam context, source controls, folder navigation and inline questions still work"
+    ]
+  },
+  "visual_review": {
+    "reviewed": true,
+    "screenshot": "assets/v-canvas-summary-synthetic.png"
+  },
+  "design": [
+    "Existing navy, violet and green palette",
+    "Dot-grid canvas with a central topic and up to six overview branches",
+    "At most three organized notes in the overview; all notes remain available in Apuntes",
+    "Fallback nodes use literal excerpts or concepts already extracted from the transcript",
+    "Branches for tasks, exam notices, review questions and figures when present",
+    "Pan, zoom, reset and fullscreen controls",
+    "Node details in a dismissible bottom sheet",
+    "Compact synthesis with optional full-text expansion and save",
+    "Original study categories remain accessible below the overview"
+  ],
+  "privacy": {
+    "content": "Fictional software metrics class only",
+    "user_recordings_uploaded": false,
+    "external_design_service_used": false,
+    "provider_requests_for_canvas": false,
+    "data_schema_changed": false
+  },
+  "limits": [
+    "Graph lines show topic grouping, not validated causal relationships",
+    "Overview labels do not correct transcription errors or improve model accuracy",
+    "Visual verification on the emulator; physical device review remains pending"
+  ]
+}

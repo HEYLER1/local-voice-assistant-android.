@@ -1,0 +1,49 @@
+{
+  "version": "0.26.2-assistant",
+  "version_code": 37,
+  "generated_at_utc": "2026-10-25T22:49:53.320282+00:00",
+  "build": {
+    "compiled": true,
+    "apk": "v-asistente-android-0.26.2.apk",
+    "sha256": "9ba5c8e9a51a5eee9f191d6e556d9823d8078567e3dc1dad1be52b384988c220",
+    "installed_on": "emulator-5554"
+  },
+  "instrumented_tests": {
+    "passed": 10,
+    "failed": 0,
+    "duration_seconds": 23.065,
+    "classes": [
+      "SummaryCanvasTest",
+      "StudySummaryTest",
+      "FolderInterfaceTest"
+    ],
+    "checks": [
+      "Summary canvas fills the available width and height without duplicate page headings",
+      "Pan, zoom, reset and immersive view preserve source-backed note access",
+      "Task timing, exam notices, review answers and explicit save actions remain available",
+      "Sidebar hierarchy and contextual question navigation remain usable"
+    ]
+  },
+  "design": [
+    "Full central workspace with a subtle background and existing navy, violet and green palette",
+    "Topic with a short summary preview; full text opens on tap",
+    "Compact icon controls for notes, refresh, immersive view and zoom",
+    "Study categories and secondary details are accessible on demand"
+  ],
+  "privacy": {
+    "test_content": "Fictional software metrics class",
+    "personal_conversations_deleted": false,
+    "external_model_requests_for_ui_tests": false
+  },
+  "screenshot": "assets/v-clean-summary-canvas-synthetic.png",
+  "visual_review": {
+    "reviewed": true,
+    "content": "Fictional transcript only",
+    "device": "Emulator; physical phone not tested"
+  },
+  "scope": {
+    "storage_schema_changed": false,
+    "transcription_engine_changed": false,
+    "answer_model_changed": false
+  }
+}

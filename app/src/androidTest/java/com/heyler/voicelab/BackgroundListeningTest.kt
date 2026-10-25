@@ -41,6 +41,10 @@ class BackgroundListeningTest {
             await("Language manager busy"){!vm.state.value.localSpeechModels.checking&&!vm.state.value.localSpeechModels.downloading}
             scenario!!.onActivity{ListeningService.startFromAudio(it,pipe[0]);pipe[0].close()}
             await("Service/recognizer did not start: ${vm.state.value.status}"){vm.state.value.backgroundServiceActive&&vm.state.value.listening}
+            val notifications=context.getSystemService(NotificationManager::class.java)
+            fun notificationText()=notifications.activeNotifications.firstOrNull{it.id==ListeningService.NOTICE}?.notification?.extras?.getCharSequence(android.app.Notification.EXTRA_TEXT)?.toString().orEmpty()
+            await("Foreground listening has the wrong status"){notificationText()=="Transcribiendo · toca para abrir el chat"}
+            assertFalse(vm.state.value.status.contains("segundo plano",true))
             feed(output,"1.wav")
             await("First phrase missing"){vm.state.value.lines.any{ConversationRules.key(it.text).contains("viernes")}}
             val oldKey=vm.state.value.conversationKey
@@ -48,6 +52,7 @@ class BackgroundListeningTest {
             assertFalse(vm.state.value.appVisible)
             assertTrue("Closing activity stopped the microphone",vm.state.value.listening)
             assertTrue(vm.state.value.backgroundServiceActive)
+            await("Background notification did not update"){notificationText().contains("segundo plano")}
             feed(output,"5.wav")
             await("No new transcription after leaving the activity: ${vm.state.value.status}"){vm.state.value.lines.any{ConversationRules.key(it.text).contains("circulo")}}
             val notice=context.getSystemService(NotificationManager::class.java).activeNotifications.first{it.id==ListeningService.NOTICE}
@@ -55,6 +60,7 @@ class BackgroundListeningTest {
             assertTrue(notice.notification.actions.any{it.title.toString()=="Detener"})
             scenario=ActivityScenario.launch(MainActivity::class.java)
             scenario!!.onActivity{assertSame(vm,it.assistant);assertEquals(oldKey,it.assistant.state.value.conversationKey);assertTrue(it.assistant.state.value.listening)}
+            await("Foreground status did not return when reopening V"){notificationText()=="Transcribiendo · toca para abrir el chat"}
             scenario!!.moveToState(Lifecycle.State.CREATED)
             notice.notification.actions.first{it.title.toString()=="Detener"}.actionIntent.send()
             await("Notification did not stop microphone"){!vm.state.value.listening&&!vm.state.value.starting&&!vm.state.value.backgroundServiceActive}

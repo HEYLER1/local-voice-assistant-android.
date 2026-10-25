@@ -8,11 +8,13 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
@@ -21,33 +23,90 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-@Composable fun StudySummaryPanel(s:AssistantState,onQuestion:(String)->Unit,onEdit:(SpeechLine)->Unit,onSave:(String,String)->Unit,onRefresh:()->Unit){
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable fun StudySummaryPanel(s:AssistantState,onQuestion:(String)->Unit,onEdit:(SpeechLine)->Unit,onSave:(String,String)->Unit,onRefresh:()->Unit,modifier:Modifier=Modifier){
     val guide=remember(s.lines){StudyGuide.build(s.lines)}
     val lesson=remember(s.lines){LessonMemory.build(s.lines)}
-    var section by rememberSaveable{mutableIntStateOf(0)}
-    Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
-        Text("Resumen",style=MaterialTheme.typography.headlineSmall,fontWeight=FontWeight.SemiBold,modifier=Modifier.weight(1f))
-        TextButton(onClick=onRefresh,enabled=s.onlineAnswers&&!s.generating&&s.lines.sumOf{it.text.length}>=100&&!(s.transcriptionOnly&&(s.listening||s.starting))){Text("Actualizar")}
+    val topic=s.organization.title.ifBlank{lesson.topic}
+    var section by rememberSaveable{mutableIntStateOf(if(s.organization.sections.isNotEmpty())6 else 0)}
+    var inspected by rememberSaveable(s.conversationKey){mutableStateOf<String?>(null)}
+    val nodes=remember(s.organization.sections,guide,lesson,s.answers.size){
+        buildList{
+            if(s.organization.sections.isNotEmpty())s.organization.sections.take(3).forEach{note->add(SummaryCanvasNode("note:${note.title}",note.title,"Apuntes organizados",note=note))}
+            else if(guide.concepts.isNotEmpty())guide.concepts.take(3).forEach{concept->add(SummaryCanvasNode("concept:${concept.excerpt.sourceId}:${concept.term}",concept.term,"Concepto del audio",note=OrganizedSection(concept.term,concept.excerpt.text,listOf(concept.excerpt.sourceId))))}
+            else guide.ideas.take(3).forEachIndexed{index,idea->val title=idea.text.split(Regex("\\s+")).take(6).joinToString(" ");add(SummaryCanvasNode("idea:$index",title,"Extracto del audio",note=OrganizedSection(title,idea.text,listOf(idea.sourceId))))}
+            if(lesson.tasks.isNotEmpty())add(SummaryCanvasNode("tasks","Por preparar","${lesson.tasks.size} ${if(lesson.tasks.size==1)"indicación"else "indicaciones"}",category=4))
+            if(lesson.exams.isNotEmpty())add(SummaryCanvasNode("exam","Examen","${lesson.exams.size} ${if(lesson.exams.size==1)"aviso"else "avisos"}",category=5))
+            if(s.answers.isNotEmpty())add(SummaryCanvasNode("review","Preguntas","${s.answers.size} ${if(s.answers.size==1)"pregunta"else "preguntas"}",category=2))
+            if(size<6&&guide.figures.isNotEmpty())add(SummaryCanvasNode("figures","Cifras","${guide.figures.size} ${if(guide.figures.size==1)"extracto"else "extractos"}",category=3))
+        }.take(6)
     }
-    if(s.lines.isNotEmpty())Text("${if(lesson.topics.isEmpty())"Contexto orientativo"else "Tema"} · ${lesson.topic}",style=MaterialTheme.typography.bodySmall,color=VoiceGreen)
-    if(s.summary.isNotBlank()){
-        SelectionContainer{Text(ReadableAnswer.format(s.summary),style=MaterialTheme.typography.bodyLarge,lineHeight=27.sp)}
-        Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically){
-            Text("Síntesis de fragmentos seleccionados de la clase",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.weight(1f))
-            TextButton(onClick={onSave(s.summary,"Resumen generado, revisar antes de guardar")},contentPadding=PaddingValues(0.dp)){Text("Guardar")}
+    val canRefresh=s.onlineAnswers&&!s.generating&&s.lines.sumOf{it.text.length}>=100&&!(s.transcriptionOnly&&(s.listening||s.starting))
+    val issue=s.summaryError.ifBlank{s.onlineNotice}
+    val tools:@Composable ()->Unit={
+        IconButton(onClick={inspected="browse"},modifier=Modifier.size(40.dp).semantics{contentDescription="Explorar apuntes"}){VoiceGlyph("notes",MaterialTheme.colorScheme.onSurfaceVariant,Modifier.size(20.dp))}
+        IconButton(onClick=onRefresh,enabled=canRefresh,modifier=Modifier.size(40.dp).semantics{contentDescription=if(s.analysisRunning)"Actualizando resumen"else "Actualizar resumen"}){
+            if(s.analysisRunning)CircularProgressIndicator(Modifier.size(18.dp),strokeWidth=2.dp,color=VoiceAccent)
+            else VoiceGlyph("refresh",if(canRefresh)VoiceAccent else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha=.4f),Modifier.size(20.dp))
         }
-    }else Text(if(s.generating)"Preparando la síntesis…"else if(!s.onlineAnswers)"La síntesis online está desactivada. Puedes repasar las ideas extraídas abajo."else "Toca Actualizar para sintetizar lo hablado. Ya puedes repasar las ideas extraídas abajo.",style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
-    if(s.summaryError.isNotBlank())Text(s.summaryError,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.error)
-    HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant)
-    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(22.dp)){
-        listOf(0 to "Ideas",4 to "Tareas ${lesson.tasks.size}",5 to "Examen ${lesson.exams.size}",1 to "Conceptos",2 to "Repaso",3 to "Cifras").forEach{(index,label)->
-            Column(Modifier.clickable{section=index}.semantics{selected=section==index;role=Role.Tab}.padding(top=6.dp),horizontalAlignment=Alignment.CenterHorizontally){
-                Text(label,color=if(section==index)VoiceAccent else MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.labelLarge,modifier=Modifier.padding(bottom=10.dp))
-                Box(Modifier.width(28.dp).height(2.dp).background(if(section==index)VoiceAccent else MaterialTheme.colorScheme.background))
+        if(issue.isNotBlank())IconButton(onClick={inspected="status"},modifier=Modifier.size(40.dp).semantics{contentDescription="Ver aviso del resumen"}){Text("!",color=VoiceAccent,fontWeight=FontWeight.Bold)}
+    }
+    BoxWithConstraints(modifier.fillMaxWidth()){
+        val viewport=if(constraints.hasBoundedHeight)Modifier.fillMaxSize()else Modifier.fillMaxWidth().height(560.dp)
+        if(s.lines.isEmpty()&&s.summary.isBlank())Box(viewport){
+            Row(Modifier.align(Alignment.TopStart).padding(start=8.dp)){tools()}
+            VoiceGlyph("spark",MaterialTheme.colorScheme.outline,Modifier.align(Alignment.Center).size(36.dp).semantics{contentDescription="Resumen sin contenido"})
+        }else SummaryCanvas(topic,nodes,{inspected=it?.id?:"summary"},viewport,tools,ReadableAnswer.format(s.summary))
+    }
+    val node=nodes.firstOrNull{it.id==inspected}
+    if(inspected=="summary"||inspected=="browse"||inspected=="status"||node!=null)ModalBottomSheet(onDismissRequest={inspected=null},sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true),containerColor=androidx.compose.ui.graphics.Color(0xFF141827)){
+        Column(Modifier.fillMaxWidth().heightIn(max=600.dp).navigationBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal=20.dp).padding(bottom=20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
+            Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.Top){
+                Text(if(inspected=="browse")"Contenido"else if(inspected=="status")"Aviso"else node?.title?:topic,modifier=Modifier.weight(1f),style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.SemiBold)
+                IconButton(onClick={inspected=null},modifier=Modifier.size(36.dp).semantics{contentDescription="Cerrar detalle del resumen"}){VoiceGlyph("close",MaterialTheme.colorScheme.onSurfaceVariant,Modifier.size(18.dp))}
             }
+            if(inspected=="browse"){
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(16.dp)){
+                    val categories=buildList{if(s.organization.sections.isNotEmpty())add(6 to "Apuntes");addAll(listOf(0 to "Ideas",4 to "Tareas ${lesson.tasks.size}",5 to "Examen ${lesson.exams.size}",1 to "Conceptos",2 to "Repaso",3 to "Cifras"))}
+                    categories.forEach{(index,label)->
+                        Column(Modifier.clickable{section=index}.semantics{selected=section==index;role=Role.Tab}.padding(vertical=6.dp),horizontalAlignment=Alignment.CenterHorizontally){
+                            Text(label,color=if(section==index)VoiceAccent else MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.labelLarge,modifier=Modifier.padding(bottom=8.dp))
+                            Box(Modifier.width(24.dp).height(2.dp).background(if(section==index)VoiceAccent else MaterialTheme.colorScheme.background))
+                        }
+                    }
+                }
+                StudyContent(section,s,guide,lesson,{inspected=null;onQuestion(it)},{inspected=null;onEdit(it)},{text,source->inspected=null;onSave(text,source)})
+            }else if(inspected=="status"){
+                Text(issue,style=MaterialTheme.typography.bodyMedium)
+                TextButton(onClick={inspected=null;onRefresh()},enabled=canRefresh){Text("Reintentar")}
+            }else if(inspected=="summary"){
+                if(s.organization.title.isBlank()&&lesson.topics.isEmpty())StudyEmpty("Tema orientativo a partir de la transcripción.")
+                if(s.summary.isNotBlank()){
+                    SelectionContainer{Text(ReadableAnswer.format(s.summary),lineHeight=26.sp)}
+                    TextButton(onClick={inspected=null;onSave(s.summary,"Resumen generado, revisar antes de guardar")}){Text("Guardar resumen")}
+                }else StudyEmpty("La síntesis aún no está disponible. Puedes explorar los extractos del lienzo.")
+            }else if(node?.note!=null)OrganizedNoteBody(node.note,s,{inspected=null;onEdit(it)})
+            else node?.category?.let{category->StudyContent(category,s,guide,lesson,{inspected=null;onQuestion(it)},{inspected=null;onEdit(it)},{text,source->inspected=null;onSave(text,source)})}
         }
     }
+}
+@Composable private fun OrganizedNote(note:OrganizedSection,s:AssistantState,onEdit:(SpeechLine)->Unit){
+    var expanded by rememberSaveable(note.title){mutableStateOf(false)}
+    Column(Modifier.fillMaxWidth().animateContentSize(),verticalArrangement=Arrangement.spacedBy(6.dp)){
+        TextButton(onClick={expanded=!expanded},contentPadding=PaddingValues(0.dp)){Text((if(expanded)"▾ "else "▸ ")+note.title,style=MaterialTheme.typography.titleMedium,color=VoiceAccent)}
+        if(expanded)OrganizedNoteBody(note,s,onEdit)
+    }
+}
+@Composable private fun OrganizedNoteBody(note:OrganizedSection,s:AssistantState,onEdit:(SpeechLine)->Unit){
+    SelectionContainer{Text(note.text,lineHeight=25.sp)}
+    note.sources.take(3).forEach{id->s.lines.firstOrNull{it.id==id}?.let{line->TextButton(onClick={onEdit(line)},contentPadding=PaddingValues(0.dp)){Text("Ver fuente en la transcripción ↗",style=MaterialTheme.typography.labelSmall)}}}
+}
+@Composable private fun StudyContent(section:Int,s:AssistantState,guide:StudyGuide,lesson:LessonMemory,onQuestion:(String)->Unit,onEdit:(SpeechLine)->Unit,onSave:(String,String)->Unit){
     when(section){
+        6->{
+            if(s.organization.sections.isEmpty())StudyEmpty("Los apuntes organizados aparecerán al analizar la conversación.")
+            s.organization.sections.forEach{note->key(note.title){OrganizedNote(note,s,onEdit)}}
+        }
         0->{
             Text("Lo esencial",style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold)
             if(guide.ideas.isEmpty())StudyEmpty("Añade más contenido para reunir las ideas de la clase.")
@@ -99,7 +158,6 @@ import androidx.compose.ui.unit.sp
             lesson.exams.forEach{item->StudyInstructionPanel(item,s,onEdit,onSave)}
         }
     }
-    Text("Extractos del audio · revisa posibles errores de transcripción y del modelo.",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
 }
 @Composable private fun StudyInstructionPanel(item:StudyInstruction,s:AssistantState,onEdit:(SpeechLine)->Unit,onSave:(String,String)->Unit){
     var expanded by rememberSaveable(item.id){mutableStateOf(false)}

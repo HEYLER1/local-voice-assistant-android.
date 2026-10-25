@@ -1,0 +1,74 @@
+{
+  "version": "0.24-assistant",
+  "generated_at_utc": "2026-10-25T21:09:02.057154+00:00",
+  "latest_build": {
+    "compiled": true,
+    "unit_tests": {
+      "tests": 43,
+      "failures": 0,
+      "errors": 0
+    },
+    "apk": "v-asistente-android-0.24.apk",
+    "sha256": "be3f15f2f3ee6972355c461606b429e8ad9afda54bfe20a2d71104ce23107177"
+  },
+  "controlled_emulator_run": {
+    "passed": 24,
+    "failed": 0,
+    "latest_source_fully_retested": false,
+    "cases": [
+      "oneRequestOrganizesWholeBlockAndQuotaDoesNotFloodCards",
+      "sourceValidationAndDedupKeepOnlySupportedQuestions",
+      "importingLongTextKeepsEveryWord",
+      "upgradesOldDatabaseWithoutLosingTranscript",
+      "folderMovesSurviveAutosaveAndDeletingFolderKeepsConversation",
+      "organizedSectionsExposeSourcesAndSuggestedQuestionsAreLabeled",
+      "inferredReviewQuestionsStaySeparateFromHeardQuestions",
+      "folderFiltersAndMoveMenuKeepUserInControl",
+      "activeBackgroundSessionStillAnalyzesQuestions",
+      "viewModelRoutesAudioQuestionsAndSummaryOnlineWithoutLoadingLocalLlm",
+      "quotaFailureDoesNotRetryOrExposeProviderBody",
+      "truncatedStreamIsNotReportedAsCompleted",
+      "cancellationCancelsTheNetworkCall",
+      "streamsOnlyAnswerAndSendsNoCredentialsOrPromptInUrl",
+      "completeConversationSurvivesReopening",
+      "namedClassCanContinueWithoutLosingEarlierLessons",
+      "interruptedAnswersAreNotRestoredAsGenerating",
+      "lessonMemoryRebuildsFromHistoryAndDoesNotMixChats",
+      "classQuestionUsesContextAndDoesNotUploadSavedLibrary",
+      "entryOptionsRenameAndDeleteWithoutOpeningChat",
+      "recognitionSurvivesActivityDestructionAndNotificationStopsIt",
+      "backgroundOptOutStopsRecordingAndService",
+      "floatingControlsAppearOutsideChatAndStopRecording",
+      "cancellingQueuedServiceStartDoesNotReopenMicrophone"
+    ]
+  },
+  "pending": [
+    "Emulator verification after final refinements to source spans, deduplication and scheduling",
+    "Live anonymous provider test using fictional input",
+    "Galaxy A54 recording/session validation"
+  ],
+  "execution_note": "The final additional build and emulator installation were not authorized; neither was retried.",
+  "privacy": {
+    "attached_transcript_uploaded_to_external_provider": false,
+    "attached_transcript_copied_to_repo": false,
+    "audio_storage_added": false,
+    "test_content": "fictional text and existing synthetic PCM fixtures"
+  },
+  "implementation": [
+    "User-managed folders, rename, move and non-destructive folder deletion",
+    "Database v1 to v2 migration retains conversations; history reads metadata rather than full transcript JSON",
+    "Block-level model analysis combines topic, summary, notes and grounded answers",
+    "Heard questions and generated study questions are labeled separately",
+    "Literal evidence validation including adjacent speech chunks",
+    "Local semantic-key deduplication and stable question identifiers",
+    "One request at a time with 30-second minimum spacing, respecting HTTP 402/429 Retry-After",
+    "Automatic requests pause on quota errors without clearing existing notes",
+    "Transcript text can be imported without saving audio"
+  ],
+  "limits": [
+    "Controlled tests validate app behavior, not a general model accuracy score",
+    "The service has no latency or availability guarantee",
+    "Transcription errors cannot always be reconstructed",
+    "Suggestions and summaries still require review"
+  ]
+}

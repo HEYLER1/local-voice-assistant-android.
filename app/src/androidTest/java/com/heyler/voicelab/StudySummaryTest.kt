@@ -23,8 +23,9 @@ class StudySummaryTest{
                 StudySummaryPanel(state,{}, {opened=it.id},{_,_->},{})
             }
         }}}}
+        rule.onNodeWithContentDescription("Explorar apuntes").performClick()
         rule.onNodeWithText("Conceptos").performScrollTo().performClick()
-        rule.onNodeWithText("Un eclipse solar").assertIsDisplayed()
+        rule.onAllNodesWithText("Un eclipse solar").onLast().assertIsDisplayed()
         rule.onNodeWithText("Repaso").performScrollTo().performClick()
         rule.onNodeWithText(explanation).assertDoesNotExist()
         rule.onNodeWithText("Mostrar explicación").performClick()
@@ -48,13 +49,15 @@ class StudySummaryTest{
                 StudySummaryPanel(state,{}, {},{text,source->savedText=text;savedSource=source},{})
             }
         }}}}
-        rule.onNodeWithText("Tareas 1").performClick()
+        rule.onNodeWithContentDescription("Explorar apuntes").performClick()
+        rule.onNodeWithText("Tareas 1").performScrollTo().performClick()
         rule.onNodeWithText(homework).assertIsDisplayed()
         rule.onNodeWithText("Plazo citado · para el viernes").assertIsDisplayed()
         capture("v-student-tasks-synthetic.png")
         rule.onNodeWithText("Guardar como tarea").performClick()
         rule.runOnIdle{assertEquals(homework,savedText);assertTrue(savedSource.startsWith("Tarea de clase"))}
-        rule.onNodeWithText("Examen 1").performClick()
+        rule.onNodeWithContentDescription("Explorar apuntes").performClick()
+        rule.onNodeWithText("Examen 1").performScrollTo().performClick()
         rule.onNodeWithText("Esto es una pregunta de examen.").assertIsDisplayed()
         rule.onNodeWithText("Ver contexto de la indicación").performClick()
         rule.onNodeWithText(explanation).assertIsDisplayed()

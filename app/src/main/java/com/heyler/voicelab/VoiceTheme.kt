@@ -118,6 +118,16 @@ private val VoiceColors=darkColorScheme(
             "add"->{drawLine(color,Offset(w*.2f,h*.5f),Offset(w*.8f,h*.5f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round);drawLine(color,Offset(w*.5f,h*.2f),Offset(w*.5f,h*.8f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round)}
             "search"->{drawCircle(color,w*.27f,Offset(w*.42f,h*.42f),style=stroke);drawLine(color,Offset(w*.63f,h*.63f),Offset(w*.85f,h*.85f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round)}
             "chat"->{drawRoundRect(color,Offset(w*.12f,h*.15f),Size(w*.76f,h*.58f),androidx.compose.ui.geometry.CornerRadius(w*.14f),style=stroke);drawLine(color,Offset(w*.25f,h*.73f),Offset(w*.25f,h*.9f),strokeWidth=2.dp.toPx());drawLine(color,Offset(w*.25f,h*.9f),Offset(w*.45f,h*.73f),strokeWidth=2.dp.toPx())}
+            "check"->{drawLine(color,Offset(w*.18f,h*.52f),Offset(w*.4f,h*.74f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round);drawLine(color,Offset(w*.4f,h*.74f),Offset(w*.84f,h*.24f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round)}
+            "minus"->{drawLine(color,Offset(w*.2f,h*.5f),Offset(w*.8f,h*.5f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round)}
+            "notes"->{for(i in 0..2){val y=h*(.25f+i*.25f);drawCircle(color,1.dp.toPx(),Offset(w*.15f,y));drawLine(color,Offset(w*.35f,y),Offset(w*.85f,y),strokeWidth=1.6.dp.toPx(),cap=StrokeCap.Round)}}
+            "refresh"->{drawArc(color,40f,285f,false,Offset(w*.17f,h*.17f),Size(w*.66f,h*.66f),style=stroke);val arrow=androidx.compose.ui.graphics.Path().apply{moveTo(w*.85f,h*.13f);lineTo(w*.85f,h*.43f);lineTo(w*.55f,h*.16f);close()};drawPath(arrow,color)}
+            "fit","expand"->{for(x in listOf(.18f,.82f))for(y in listOf(.18f,.82f)){val dx=if(x<.5f).18f else -.18f;val dy=if(y<.5f).18f else -.18f;drawLine(color,Offset(w*x,h*y),Offset(w*(x+dx),h*y),strokeWidth=1.6.dp.toPx(),cap=StrokeCap.Round);drawLine(color,Offset(w*x,h*y),Offset(w*x,h*(y+dy)),strokeWidth=1.6.dp.toPx(),cap=StrokeCap.Round)}}
+            "copy"->{
+                val back=androidx.compose.ui.graphics.Path().apply{moveTo(w*.62f,h*.12f);lineTo(w*.22f,h*.12f);quadraticTo(w*.12f,h*.12f,w*.12f,h*.22f);lineTo(w*.12f,h*.64f);quadraticTo(w*.12f,h*.74f,w*.22f,h*.74f);lineTo(w*.25f,h*.74f)}
+                drawPath(back,color,style=stroke)
+                drawRoundRect(color,Offset(w*.32f,h*.3f),Size(w*.54f,h*.58f),androidx.compose.ui.geometry.CornerRadius(w*.08f),style=stroke)
+            }
             "save"->{val path=androidx.compose.ui.graphics.Path().apply{moveTo(w*.25f,h*.13f);lineTo(w*.75f,h*.13f);lineTo(w*.75f,h*.88f);lineTo(w*.5f,h*.7f);lineTo(w*.25f,h*.88f);close()};drawPath(path,color,style=stroke)}
             "settings"->{drawCircle(color,w*.18f,Offset(w/2,h/2),style=stroke);for(i in 0 until 8){val angle=i*Math.PI/4;val x=kotlin.math.cos(angle).toFloat();val y=kotlin.math.sin(angle).toFloat();drawLine(color,Offset(w/2+x*w*.31f,h/2+y*h*.31f),Offset(w/2+x*w*.42f,h/2+y*h*.42f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round)}}
             "spark"->{val path=androidx.compose.ui.graphics.Path().apply{moveTo(w*.5f,h*.08f);lineTo(w*.62f,h*.38f);lineTo(w*.92f,h*.5f);lineTo(w*.62f,h*.62f);lineTo(w*.5f,h*.92f);lineTo(w*.38f,h*.62f);lineTo(w*.08f,h*.5f);lineTo(w*.38f,h*.38f);close()};drawPath(path,color,style=stroke)}

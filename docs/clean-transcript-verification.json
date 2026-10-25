@@ -1,0 +1,50 @@
+{
+  "version": "0.26.1-assistant",
+  "version_code": 36,
+  "generated_at_utc": "2026-10-25T22:35:03.392488+00:00",
+  "build": {
+    "compiled": true,
+    "apk": "v-asistente-android-0.26.1.apk",
+    "sha256": "3e563dfb18ed74cd4591710372532da8e2586a77a80ad95053921638430a4b27",
+    "installed_on": "emulator-5554"
+  },
+  "instrumented_tests": {
+    "passed": 11,
+    "failed": 0,
+    "classes": [
+      "TranscriptWorkspaceTest",
+      "FolderInterfaceTest",
+      "ComposerKeyboardTest"
+    ],
+    "checks": [
+      "Transcript tab has no heading, pause label, edit/save controls, follow text, empty-question message or answer preview",
+      "Copy callback receives literal transcript text; optional voice labels are included only when enabled",
+      "Incoming live text preserves the reading position after scrolling to earlier content",
+      "Written replies become visible even after browsing study questions",
+      "Existing keyboard requests, question selection, sidebar sections and note sources remain usable"
+    ]
+  },
+  "clipboard": {
+    "uses": "Android ClipboardManager with ClipData.newPlainText",
+    "sensitive_preview_flag": true,
+    "test_strategy": "Copy payload verified through the UI action callback; the tests do not read or overwrite the user clipboard",
+    "reference": "https://developer.android.com/develop/ui/compose/touch-input/copy-and-paste"
+  },
+  "design": [
+    "Plain transcript and a single copy/check icon in normal state",
+    "One scroll area uses the available height instead of a fixed 420 dp limit",
+    "Voice labels remain optional",
+    "Questions and written replies live in Preguntas",
+    "Only actionable recording errors may appear above the transcript"
+  ],
+  "privacy": {
+    "test_content": "Fictional transcript and simulated answers",
+    "personal_conversations_deleted": false,
+    "external_model_requests_for_ui_tests": false
+  },
+  "screenshot": "assets/v-clean-transcript-synthetic.png",
+  "visual_review": {
+    "reviewed": true,
+    "content": "Fictional transcript only"
+  }
+}

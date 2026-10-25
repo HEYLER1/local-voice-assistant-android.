@@ -2,17 +2,124 @@
 
 ![Logo de V](docs/assets/v-logo.svg)
 
-Asistente para estudiantes en Kotlin y Jetpack Compose: transcripción, respuestas online sin registro ni clave, contexto de clase, tareas, avisos de examen e historial en el dispositivo y escucha en segundo plano con botón flotante.
+Asistente para estudiantes en Kotlin y Jetpack Compose: transcripción, respuestas online sin registro ni clave, contexto de clase, carpetas, tareas, avisos de examen, historial en el dispositivo y escucha en segundo plano con botón flotante.
 
-## Interfaz actual · 0.23
+## Interfaz actual · 0.26.2
 
-Texto, Preguntas y Resumen permanecen arriba. Resumen organiza Ideas, Tareas, Examen, Conceptos, Repaso y Cifras. El tema y los fragmentos anteriores ayudan a interpretar las preguntas; las indicaciones mantienen su texto y enlace de origen.
+Texto, Preguntas y Resumen permanecen arriba. Texto muestra la transcripción y copia directa; Preguntas conserva respuestas desplegables. Resumen usa el espacio central como un lienzo con síntesis, apuntes y acceso a sus fuentes. Las carpetas desplegables agrupan las conversaciones elegidas por el usuario.
 
-Las capturas siguientes usan contenido ficticio.
+Captura con contenido ficticio:
 
-![Tareas y plazo literal de una clase ficticia](docs/assets/v-student-tasks-synthetic.png)
+![Resumen de una clase ficticia](docs/assets/v-clean-summary-canvas-synthetic.png)
 
-![Aviso de examen y contexto de una clase ficticia](docs/assets/v-student-exam-synthetic.png)
+## Android 0.26.2: resumen limpio y a pantalla completa
+
+**Resumen** aprovecha todo el espacio central con un lienzo sin marco exterior, manteniendo los colores de V. El tema principal incluye una vista breve de la síntesis; al tocarlo se abre el texto completo. Las ramas abren los apuntes y sus fuentes. Las conexiones representan agrupaciones por tema.
+
+Se retiraron encabezados repetidos, las listas duplicadas debajo del lienzo y los controles con texto permanente. Los iconos permiten explorar apuntes, actualizar, ampliar la vista y ajustar el zoom. Las categorías de estudio, tareas, avisos de examen y repaso se consultan desde **Explorar apuntes**, sin ocupar espacio en la vista general.
+
+Compilación e instalación correctas en emulador; **10 pruebas de interfaz correctas**, incluidas gestos, fuentes, guardado y navegación. Captura con contenido ficticio; revisión en teléfono físico pendiente. Esta actualización no cambia el almacenamiento ni los motores de transcripción y respuestas.
+
+[Ver diseño](docs/assets/v-clean-summary-canvas-synthetic.png) · [Verificación](docs/clean-summary-verification.json).
+
+## Android 0.26.1: texto limpio y copia directa
+
+La pestaña **Texto** muestra la transcripción y un único icono **Copiar**, con confirmación visual breve. Se retiraron el encabezado Transcripción, el estado Pausada, Editar / guardar, Siguiendo audio y el aviso de preguntas vacías. Las respuestas aparecen en **Preguntas**; enviar una consulta escrita abre allí su respuesta, incluso después de usar Para repasar. Las etiquetas de voz siguen siendo opcionales.
+
+El texto usa el alto disponible con un solo desplazamiento. Durante la escucha sigue el contenido nuevo; si subes para leer una parte anterior, no te devuelve al final. El historial sigue guardándose automáticamente. Los errores que impiden escuchar se mantienen visibles.
+
+La copia usa texto plano y marca el contenido como sensible para ocultar su vista previa en el portapapeles del sistema, siguiendo la [documentación de Android](https://developer.android.com/develop/ui/compose/touch-input/copy-and-paste). No modifica el texto de la conversación.
+
+Compilación e instalación correctas en emulador; **11 pruebas de interfaz correctas**. Se comprobó el contenido enviado a la acción Copiar mediante un callback de prueba, sin leer ni sobrescribir el portapapeles personal. [Ver diseño](docs/assets/v-clean-transcript-synthetic.png) · [Verificación](docs/clean-transcript-verification.json).
+
+## Android 0.26: resumen como lienzo visual
+
+**Resumen** reúne el tema principal y sus ramas en un lienzo con fondo de puntos, conservando el azul oscuro, violeta y verde de V. Puedes arrastrar la vista, ampliar con gestos o botones, restablecerla y abrirla a pantalla completa. Tocar una rama abre sus apuntes, tareas, avisos de examen o preguntas en un panel de detalle; las fuentes conservan el enlace a su transcripción original.
+
+La vista general muestra hasta seis ramas, incluidas hasta tres secciones de apuntes. El resto sigue disponible en **Apuntes** y en las categorías de estudio. Si aún no hay apuntes organizados, el lienzo usa conceptos o extractos literales ya presentes en la conversación. Las conexiones indican agrupación por tema, no relaciones causales verificadas. La síntesis se presenta compacta y permite **Leer completo** y guardar. Este cambio visual reutiliza lo guardado; no requiere otro servicio ni cambia el motor de transcripción o respuestas.
+
+| Verificación | Resultado |
+| --- | --- |
+| Compilación e instalación en emulador | Correctas; versión 0.26, código 35. |
+| Pruebas de interfaz | 10 correctas: gestos, vista ampliada, fuentes, tareas, repaso y navegación existente. |
+| Datos de la captura | Clase ficticia sobre métricas de software. |
+| Teléfono físico | Pendiente de revisión visual. |
+
+[Ver el diseño](docs/assets/v-canvas-summary-synthetic.png) · [Detalle de verificación](docs/summary-canvas-verification.json).
+
+## Android 0.25.4: estado de escucha según la pantalla
+
+Al pulsar el micrófono se muestra **Iniciando micrófono…**, sin llamar «segundo plano» a la escucha dentro de V. La notificación indica transcripción normal mientras la app está visible; al salir cambia a **Transcribiendo en segundo plano** y al volver recupera el mensaje normal. El servicio sigue iniciándose desde la pantalla visible para permitir esa continuidad.
+
+**Continuar al salir de la app** mantiene la misma sesión al cambiar de aplicación. Con esa opción desactivada, salir detiene la captura. Se verificaron ambos casos en el emulador con audio sintético: **2 pruebas correctas**, incluida transcripción después de cerrar la actividad, reapertura de la misma sesión y parada desde la notificación. [Verificación](docs/listening-status-verification.json).
+
+## Android 0.25.3: jerarquía del menú y preguntas integradas
+
+Las carpetas aparecen desplazadas respecto al encabezado y sus conversaciones tienen una segunda sangría. En **Preguntas**, cada respuesta se despliega debajo de su pregunta, sin repetir el título ni reservar un bloque fijo para la lista. El contenido usa todo el alto disponible con desplazamiento único y márgenes laterales más pequeños. **Fuente** muestra la cita cuando la necesitas; Escuchar y Guardar permanecen junto a la respuesta. Puedes plegar una respuesta y elegir otra. La selección se conserva cuando llegan preguntas nuevas.
+
+Compilación e instalación correctas en el emulador; **7 pruebas de interfaz correctas**, incluidas selección estable, fuente desplegable y preguntas sin títulos duplicados. [Verificación](docs/questions-layout-verification.json) · [Preguntas con datos ficticios](docs/assets/v-inline-questions-synthetic.png) · [Jerarquía del menú](docs/assets/v-hierarchical-folders-synthetic.png).
+
+## Android 0.25.2: secciones plegables en el historial
+
+Toca **Carpetas** o **Conversaciones** para desplegar o recoger cada sección por separado. Se conserva qué carpetas estaban abiertas. Durante la búsqueda se muestran las coincidencias de las secciones plegadas; al cerrarla se recupera la vista anterior. Los encabezados se mantienen visibles al desplazar el contenido de su sección.
+
+Se retiró el menú de tres puntos de la cabecera. Renombrar, mover y eliminar siguen en las opciones de cada conversación. **Añadir transcripción de texto** está disponible en **Ajustes → Privacidad y herramientas**.
+
+Compilación e instalación en emulador correctas; **6 pruebas de interfaz correctas**. [Verificación](docs/collapsible-sidebar-verification.json).
+
+## Android 0.25.1: historial más compacto
+
+La organización se llama **Carpetas** y la acción es **Nueva conversación** en toda la navegación. Las carpetas siguen siendo desplegables y permiten agrupar cualquier conversación, clase o entrevista. Los formularios de crear carpeta y renombrar conversación solo piden **Nombre**, sin ejemplos. Se retiró el texto de ayuda permanente del menú y se compactaron las filas de conversaciones de 48 a 40 dp, sin cambiar la paleta.
+
+Compilación e instalación en emulador correctas; **6 pruebas de interfaz correctas**. [Verificación](docs/compact-sidebar-verification.json).
+
+## Android 0.25: proyectos y clases en un menú compacto
+
+El menú lateral organiza el historial como proyectos desplegables. Pulsa **＋ junto a Proyectos**, elige un nombre —por ejemplo, Seguridad ciudadana— y usa el icono de nueva conversación de ese proyecto para iniciar cada clase. Las clases aparecen debajo de su proyecto; al seleccionarlas se abre la transcripción guardada y puedes continuar con el micrófono. Cada conversación conserva sus preguntas, resumen y apuntes.
+
+La búsqueda ocupa solo un icono hasta abrirla; busca tanto proyectos como conversaciones, incluso dentro de proyectos cerrados. No se muestran grupos por fecha como Hoy, Ayer o Últimos 7 días. La biblioteca también usa filas compactas para las conversaciones y búsqueda por icono. Se mantiene la paleta de la app.
+
+| Acción | Resultado |
+| --- | --- |
+| Pulsar un proyecto | Despliega o recoge sus clases y entrevistas. |
+| Nueva clase en un proyecto | Crea una conversación asociada a ese proyecto; pulsa el micrófono para grabar. |
+| Nueva conversación en la cabecera | Inicia un chat fuera de los proyectos. |
+| Menú de una conversación | Renombra, mueve a otro proyecto o elimina tras confirmar. |
+| Eliminar un proyecto | Conserva sus conversaciones fuera del proyecto. |
+| Abrir una clase anterior | Recupera su transcripción para continuar con voz. |
+
+Las carpetas existentes se presentan como proyectos y conservan su contenido; se reutiliza el almacenamiento privado de la versión anterior.
+
+| Verificación de 0.25 | Resultado |
+| --- | --- |
+| Compilación | APK generado e instalado en el emulador. |
+| Pruebas unitarias | 43 correctas. |
+| Pruebas en emulador | 8 correctas: jerarquía, búsqueda, acciones, persistencia y migración. |
+| Teléfono físico | Pendiente de revisión visual. |
+
+[Detalle de las pruebas](docs/projects-interface-verification.json) · [Captura con clases ficticias](docs/assets/v-projects-synthetic.png).
+
+## Android 0.24: carpetas y organización contextual por bloques
+
+La app agrupa conversaciones por carpetas elegidas por el usuario: una clase, entrevista o proyecto. En el sidebar, **Carpetas → Nueva** crea una carpeta; sus opciones permiten renombrarla o eliminarla. Los menús del chat permiten **Mover a carpeta** y **Añadir transcripción de texto**. Crear un chat desde una carpeta seleccionada lo asocia a esa carpeta. Eliminar una carpeta conserva sus conversaciones en **Sin carpeta**. Se conservan transcripción, preguntas, resumen y apuntes; no se añade grabación de audio ni almacenamiento externo.
+
+El organizador usa un bloque de texto para producir un título, temas, secciones de apuntes, síntesis y respuestas. No se llama al modelo por cada signo interrogativo detectado mediante reglas. Mantiene la síntesis y las preguntas anteriores del mismo chat como contexto. Las preguntas **del audio** se separan de las **sugeridas para repasar**; una sugerencia no se presenta como una pregunta literal del docente ni como predicción de examen. Se guardan citas de origen, que se validan contra el texto, incluso cuando cruzan fragmentos contiguos. Los identificadores de las preguntas se conservan al actualizar una reformulación. Un título elegido manualmente y la ubicación en carpetas permanecen bajo control del usuario.
+
+El acceso anónimo de [Pollinations Classic](https://github.com/pollinations/pollinations/blob/master/APIDOCS.md#limits) admite una solicitud simultánea y al menos 30 segundos entre solicitudes. La app agrupa preguntas y resumen en una llamada, espacia las solicitudes y respeta `Retry-After` en HTTP 402/429. Si el proveedor limita el acceso, pausa las solicitudes automáticas y conserva el contenido anterior. El usuario puede reintentar al terminar la espera. Esto reduce solicitudes redundantes; no elimina los límites, los errores ni la dependencia de Internet.
+
+El bloque se limita a 40 fragmentos y unos 12.000 caracteres, con contexto previo acotado; la solicitud de análisis tiene un límite de 16.000 caracteres. Las conversaciones más largas se procesan progresivamente. Los títulos manuales, nombres de carpetas y textos de la biblioteca no se incorporan al análisis por bloques. Las preguntas escritas mantienen su respuesta progresiva y contexto del chat. La organización de un bloque se muestra al validar la respuesta completa; no se presenta JSON parcial como explicación.
+
+| Comprobación de esta actualización | Resultado | Alcance |
+| --- | --- | --- |
+| Compilación del APK actual | Correcta | Versión 0.24, código 29. |
+| Pruebas unitarias del código actual | 43/43 | Filtros de preguntas incompletas, deduplicación, evidencias, contexto y espera del proveedor. |
+| Ejecución controlada en emulador | 24/24 en una iteración anterior | Carpetas, migración, persistencia, interfaz, análisis con respuestas simuladas y escucha en segundo plano. |
+| Últimos ajustes en el emulador | Pendientes | No se autorizaron la última recompilación adicional ni la instalación para repetir la verificación. |
+| Respuesta real del proveedor | Pendiente | No se ejecutó la prueba preparada con una clase ficticia. |
+
+No se publica una cifra de precisión general ni se afirma equivalencia con otro modelo. Las pruebas simuladas comprueban el funcionamiento de la app; no miden la calidad real de GPT-OSS. El audio mal transcrito puede contener ambigüedades irrecuperables. Las secciones anteriores describen versiones históricas: sus referencias a una solicitud por pregunta o al contexto previo limitado no describen el nuevo organizador.
+
+[Detalle de verificación y límites](docs/organization-verification.json). La transcripción adjunta del usuario solo se revisó localmente; no se copió al repositorio ni se envió al proveedor.
 
 ## Android 0.23: escucha en segundo plano y botón flotante
 
