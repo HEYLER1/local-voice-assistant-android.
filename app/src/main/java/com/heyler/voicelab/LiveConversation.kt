@@ -26,7 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-@Composable fun LiveConversation(s:AssistantState,onEdit:(SpeechLine)->Unit,onSave:(String,String)->Unit,onSpeak:(String)->Unit,onSummary:()->Unit,onClear:()->Unit,onStop:()->Unit,onSettings:()->Unit,modifier:Modifier=Modifier,section:Int=0,onSection:(Int)->Unit={},preferredAnswerId:String?=null){
+@Composable fun LiveConversation(s:AssistantState,onEdit:(SpeechLine)->Unit,onSave:(String,String)->Unit,onSpeak:(String)->Unit,onSummary:()->Unit,onClear:()->Unit,onStop:()->Unit,onSettings:()->Unit,modifier:Modifier=Modifier,section:Int=0,onSection:(Int)->Unit={},preferredAnswerId:String?=null,transcriptPadding:PaddingValues=PaddingValues(0.dp),onResearch:()->Unit=onSummary){
     var selectedId by rememberSaveable{mutableStateOf<String?>(null)}
     LaunchedEffect(preferredAnswerId){if(preferredAnswerId!=null)selectedId=preferredAnswerId}
     LaunchedEffect(s.answers.firstOrNull()?.id){if(selectedId==null)selectedId=s.answers.firstOrNull()?.id}
@@ -40,7 +40,7 @@ import androidx.compose.ui.unit.sp
                 description.extras=android.os.PersistableBundle().apply{putBoolean(android.content.ClipDescription.EXTRA_IS_SENSITIVE,true)}
             }
             clipboard?.setPrimaryClip(clip)
-        },modifier)
+        },modifier,transcriptPadding)
         return
     }
     if(section==1){
@@ -49,7 +49,7 @@ import androidx.compose.ui.unit.sp
         }
         return
     }
-    StudySummaryPanel(s,openAnswer,onEdit,onSave,onSummary,modifier.fillMaxSize())
+    StudySummaryPanel(s,openAnswer,onEdit,onSave,onSummary,modifier.fillMaxSize(),onResearch=onResearch)
 }
 @Composable private fun ConversationNotices(s:AssistantState,onSummary:()->Unit,onStop:()->Unit,onSettings:()->Unit){
     val missingModels=(s.speechEngine=="moonshine"&&s.models.contains("Voz: importar"))||(s.speechEngine=="soniqo"&&s.models.contains("Soniqo: importar"))||(!s.transcriptionOnly&&s.models.contains("Respuestas: importar"))

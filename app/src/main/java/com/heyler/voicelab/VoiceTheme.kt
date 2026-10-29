@@ -167,7 +167,7 @@ private val VoiceColors=darkColorScheme(
     var fieldFocused by remember{mutableStateOf(false)}
     LaunchedEffect(fieldFocused){if(fieldFocused){withFrameNanos{};keyboard?.show()}}
     val send={if(enabled&&text.isNotBlank()){focus.clearFocus(force=true);idleFocus.requestFocus();keyboard?.hide();onSend()}}
-    Column(Modifier.fillMaxWidth().focusRequester(idleFocus).focusable().background(VoiceBackground).navigationBarsPadding().imePadding().padding(horizontal=16.dp,vertical=8.dp)){
+    Column(Modifier.fillMaxWidth().focusRequester(idleFocus).focusable().navigationBarsPadding().imePadding().padding(horizontal=16.dp,vertical=8.dp)){
         Surface(color=Color(0xFF222735),shape=RoundedCornerShape(32.dp),modifier=Modifier.fillMaxWidth().border(1.dp,MaterialTheme.colorScheme.outlineVariant,RoundedCornerShape(32.dp))){
             Row(Modifier.padding(horizontal=8.dp,vertical=4.dp),verticalAlignment=Alignment.CenterVertically){
                 TextField(value=text,onValueChange=onText,enabled=enabled,placeholder={Text("Escribe o habla con V")},modifier=Modifier.weight(1f).onFocusChanged{fieldFocused=it.isFocused}.pointerInput(enabled,keyboard){awaitPointerEventScope{while(true){val event=awaitPointerEvent(PointerEventPass.Final);if(enabled&&event.changes.any{it.previousPressed&&!it.pressed})keyboard?.show()}}}.semantics{contentDescription="Mensaje para V"},maxLines=4,shape=RoundedCornerShape(24.dp),colors=TextFieldDefaults.colors(focusedContainerColor=Color.Transparent,unfocusedContainerColor=Color.Transparent,disabledContainerColor=Color.Transparent,focusedIndicatorColor=Color.Transparent,unfocusedIndicatorColor=Color.Transparent),keyboardOptions=KeyboardOptions(imeAction=ImeAction.Send),keyboardActions=KeyboardActions(onSend={send()}))

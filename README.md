@@ -4,13 +4,105 @@
 
 Asistente para estudiantes en Kotlin y Jetpack Compose: transcripción, respuestas online sin registro ni clave, contexto de clase, carpetas, tareas, avisos de examen, historial en el dispositivo y escucha en segundo plano con botón flotante.
 
-## Interfaz actual · 0.26.2
+## Interfaz actual · 0.30
 
 Texto, Preguntas y Resumen permanecen arriba. Texto muestra la transcripción y copia directa; Preguntas conserva respuestas desplegables. Resumen usa el espacio central como un lienzo con síntesis, apuntes y acceso a sus fuentes. Las carpetas desplegables agrupan las conversaciones elegidas por el usuario.
 
 Captura con contenido ficticio:
 
 ![Resumen de una clase ficticia](docs/assets/v-clean-summary-canvas-synthetic.png)
+
+## Android 0.30: mapas ampliados por IA y GPT con Puter
+
+**Resumen → Ampliar y organizar mapa** genera un material de estudio con tema central, entre cinco y diez ramas solicitadas, subtítulos y explicaciones breves. Cada rama muestra sus conceptos directamente en el lienzo; puedes moverlo, ampliar la vista y abrir los detalles. El mapa se conserva dentro de su conversación y se incluye completo al copiar o guardar.
+
+La ampliación usa el proveedor de IA seleccionado. **La app no consulta Wikipedia ni recupera artículos.** Reutiliza el análisis anterior del chat y realiza una solicitud agrupada para elaborar el mapa; no consulta cada frase ni cada concepto por separado. El análisis periódico de preguntas y apuntes sigue siendo una etapa independiente. Las explicaciones nuevas se identifican como **IA**; los puntos atribuidos a la grabación requieren evidencia literal y conservan el enlace a su texto original. La IA puede equivocarse y esta ampliación no equivale a verificación externa de los hechos.
+
+| Proveedor | Uso en V | Conexión y límites |
+| --- | --- | --- |
+| Pollinations Classic | Opción inicial; preguntas, organización y mapas mediante el transporte ya existente. | Sin registro ni clave; conserva una solicitud a la vez y la espera entre solicitudes del servicio gratuito. |
+| Puter · GPT-5.6 Luna | Opción elegida explícitamente en Ajustes; usa las mismas instrucciones y el contexto del chat. | **Ajustes → Respuestas online → GPT · Puter → Conectar Puter**. No pide una clave de API. Requiere conectar una sesión de Puter; el SDK admite acceso temporal cuando esté disponible. |
+
+Puter ofrece una asignación gratuita con límites, y [el consumo corresponde a la cuenta del usuario](https://docs.puter.com/user-pays-model/). No se promete acceso ilimitado. V no compra saldo ni amplía planes automáticamente. Los límites o errores conservan los apuntes anteriores y no cambian de proveedor automáticamente. La disponibilidad del modelo se comprueba con el catálogo de la sesión; no se sustituye por otro modelo silenciosamente.
+
+La interfaz principal permanece nativa en Kotlin y Compose. Solo la conexión y las llamadas del SDK de Puter utilizan un WebView aislado con un origen local en el teléfono, según los [orígenes admitidos por Puter](https://docs.puter.com/supported-platforms/). No requiere un servidor en el Mac ni publicar una web. El SDK gestiona su sesión en el almacenamiento privado del WebView: el token no se copia a la base de conversaciones. El componente no dispone de acceso a archivos, cámara o micrófono. Las solicitudes HTTPS siguen activas para los servicios externos; HTTP se permite únicamente para el origen local.
+
+La app envía las preguntas y los fragmentos necesarios al proveedor elegido, sin enviar audio ni la biblioteca de textos guardados. La conexión a Puter se inicia con una acción del usuario. No se incluyen herramientas de búsqueda web en sus llamadas de IA.
+
+Compilación e instalación en emulador correctas: **68 pruebas unitarias y 25 instrumentadas correctas**. Las respuestas de IA se comprobaron con un transporte de prueba. Además, se verificó la carga real del SDK oficial de Puter sin iniciar sesión, crear cuentas ni consumir créditos. La generación real con GPT queda pendiente de conectar la sesión del usuario; esto no es una medición de precisión del modelo ni una prueba en teléfono físico.
+
+[Ejemplo visual del mapa con contenido de prueba](docs/assets/v-model-eclipse-map-synthetic.png) · [Verificación](docs/model-map-verification.json).
+
+## Android 0.28: resumen con contexto y estructura
+
+Al tocar el tema central de **Resumen** se abre un documento de lectura con título breve, síntesis global y subtítulos específicos. Los apuntes aparecen juntos y se desplazan sobre casi toda la pantalla; los iconos junto a cada subtítulo abren sus fuentes. **Copiar** y **Guardar resumen** incluyen el título, la síntesis y todas las secciones, también las que no caben como ramas en el lienzo. Se conserva la paleta de V.
+
+| Parte | Comportamiento |
+| --- | --- |
+| Título | Describe el asunto establecido. Empieza como **Desconocido** cuando el contenido aún no basta. Puede ampliar el tema del resumen sin sobrescribir el nombre elegido para el chat. |
+| Síntesis | Se solicita una visión global de 3 a 5 frases, relacionando las ideas centrales con el contexto anterior. |
+| Subtítulos | Nombran contenidos concretos, como **Tamaño funcional**, **Factores del esfuerzo** o **Entrevistas de auditoría**; se descartan encabezados genéricos como «Tema 1» o «Desarrollo». |
+| Actualización | El análisis recibe secciones previas completas que caben en su contexto. Puede consolidarlas, renombrarlas o unirlas mediante referencias validadas. Las secciones no actualizadas se conservan. |
+| Fuentes | Se distinguen los IDs del bloque nuevo de las referencias a notas anteriores. Una fuente corregida no vuelve a utilizarse como contexto válido con su revisión antigua. |
+| Lienzo | Aprovecha hasta seis ramas de apuntes cuando no hay tareas, avisos de examen o preguntas que necesiten una rama. Todo el contenido sigue accesible en el documento completo. |
+
+La app conserva el servicio online y su espera entre solicitudes; esta mejora no añade llamadas paralelas ni solicitudes extra para titular. El texto original permanece disponible. La síntesis se basa en lo transcrito: **no realiza investigación web ni verifica externamente los hechos**. La validación de referencias comprueba la procedencia, no garantiza por sí sola que cada interpretación del modelo sea correcta.
+
+Se corrigió la acumulación indiscriminada de párrafos: una consolidación explícita reemplaza la nota anterior y conserva sus fuentes. Si una respuesta antigua o incompleta omite la referencia necesaria, se conservan los apuntes previos para evitar pérdidas. Tampoco se eliminan temas antiguos al superar veinte secciones.
+
+Referencia de diseño: [SummN, ACL 2022](https://aclanthology.org/2022.acl-long.112/), que estudia la organización de resúmenes largos por etapas. Las comprobaciones de esta versión validan el funcionamiento y la conservación del contenido; no constituyen una medición académica de precisión del modelo.
+
+### Burbuja al borde
+
+La burbuja es circular, mantiene su icono visible de 32 dp y se ajusta al borde más cercano al soltarla: izquierda, derecha, arriba o abajo, respetando las barras del sistema. El mensaje queda a 2 dp del círculo, dura **cuatro segundos** y se descarta deslizando en cualquier dirección. Se retiró la ×; también existe una acción de descarte para accesibilidad. Tocar el mensaje abre su respuesta y mantiene la escucha.
+
+Compilación e instalación correctas en el emulador: **66 pruebas unitarias y 24 instrumentadas correctas**, con contenido ficticio y respuestas de prueba, sin solicitudes reales al modelo. La escucha en segundo plano se comprobó en una ejecución instrumentada independiente. Capturas revisadas; prueba en teléfono físico pendiente.
+
+[Resumen organizado](docs/assets/v-organized-summary-synthetic.png) · [Burbuja circular](docs/assets/v-edge-floating-question-synthetic.png) · [Verificación](docs/organized-summary-verification.json).
+
+## Android 0.27: burbuja discreta y preguntas como mensajes
+
+**Ajustes → Escucha en segundo plano → Botón flotante** muestra el logo de V más pequeño y semitransparente al salir de la app mientras escuchas. Arrástralo para moverlo; al tocarlo aparecen los controles de volver y detener. El permiso de mostrar sobre otras aplicaciones sigue siendo opcional y se solicita mediante Android.
+
+Una pregunta del audio con respuesta terminada aparece al lado como un mensaje breve: hasta dos líneas de pregunta y dos de respuesta. Tócalo para abrir esa respuesta concreta o usa × para ocultarlo. Cada mensaje dura diez segundos; si llegan varios, esperan su turno sin sustituir de golpe el anterior. Hay hasta ocho mensajes pendientes; todas las respuestas permanecen en Preguntas aunque su vista flotante no se muestre. Tocar la burbuja permite volver a consultar la última. Las preguntas ya vistas dentro del chat no se vuelven a anunciar al salir. Las sugerencias de repaso, respuestas a consultas escritas, fragmentos incoherentes y generaciones incompletas no producen avisos automáticos.
+
+| Elemento | Presentación |
+| --- | --- |
+| Logo visible | 32 dp, con área de toque de 48 dp. |
+| Burbuja en reposo | 38 % de opacidad. |
+| Mensaje automático | 58 % de opacidad, ancho máximo de 224 dp. |
+| Controles abiertos | 80 % de opacidad para facilitar su lectura. |
+| Avisos | Sin sonidos ni vibraciones añadidos. |
+
+Las dos ventanas ocupan únicamente la burbuja y el mensaje; el espacio entre ellas queda libre. Usan los indicadores de Android para [no tomar el foco del teclado y permitir eventos fuera de sus límites](https://developer.android.com/reference/android/view/WindowManager.LayoutParams#FLAG_NOT_FOCUSABLE). No se añade una llamada al modelo ni se cambia la transcripción. Se conserva la paleta de V.
+
+Compilación e instalación correctas en emulador; **53 pruebas unitarias y 6 instrumentadas correctas**. La prueba del servicio comprueba que abrir una respuesta conserva la escucha y que detener desde la burbuja libera la sesión. La imagen representa ventanas nativas sobre un documento ficticio creado para la prueba; no captura otra aplicación ni conversaciones personales. Revisión en teléfono físico pendiente.
+
+[Ver burbuja y mensaje](docs/assets/v-floating-question-synthetic.png) · [Verificación](docs/floating-questions-verification.json).
+
+## Android 0.26.4: nombres breves de conversación
+
+Los títulos automáticos describen únicamente el tema principal: hasta **7 palabras y 60 caracteres**, sin subtítulos ni listas de subtemas. Por ejemplo, **Patrones de los eclipses solares**, en lugar de añadir frecuencia y diferencias entre hemisferios al mismo nombre. El análisis ya existente recibe esta instrucción; no se añade otra solicitud online para titular.
+
+Un título automático guardado con dos puntos puede mostrarse usando el tema completo anterior a ese separador. No se corta una frase larga a mitad de una idea: si aún no hay un nombre breve respaldado por el contexto, se conserva **Desconocido** hasta obtenerlo. Los nombres manuales se respetan y las conversaciones mantienen su contenido y ubicación.
+
+Compilación e instalación en emulador correctas; **49 pruebas unitarias y 5 de persistencia/carpetas correctas**. Se verificaron nombres pendientes, títulos breves, subtítulos antiguos y nombres manuales con datos ficticios, sin solicitudes reales al modelo. Esto verifica las reglas y el guardado, no garantiza la calidad de cada título que genere el proveedor. [Verificación](docs/short-titles-verification.json).
+
+## Android 0.26.3: lectura continua y nombres con contexto
+
+**Texto** se desplaza sobre todo el fondo de la ventana. La cabecera y el micrófono quedan superpuestos con transiciones suaves; ya no delimitan un área rectangular de lectura. El icono Copiar acompaña al final del texto, dejando espacio para utilizarlo por encima del micrófono. Se conservan los colores y la posición de lectura cuando llega texto nuevo.
+
+Las conversaciones empiezan como **Desconocido**. El título espera a un tema explícito en una transcripción final o a un análisis respaldado por suficiente texto de sus fuentes. No se generan nombres juntando las primeras palabras frecuentes. Una vez establecido, el nombre automático se conserva; un nombre manual siempre tiene prioridad. Los antiguos títulos automáticos basados en palabras se vuelven a evaluar al mostrarlos, sin modificar su transcripción. Las hipótesis parciales conservan su estado al reabrir la conversación. Estas reglas son conservadoras y no garantizan que cualquier tema se identifique sin errores; se mantiene Renombrar.
+
+| Verificación | Resultado |
+| --- | --- |
+| Compilación e instalación | Correctas; versión 0.26.3, código 38. |
+| Pruebas unitarias | 47 correctas. |
+| Pruebas de interfaz y persistencia | 19 correctas; lectura, copia, teclado, nombres, historial y carpetas. |
+| Capturas | Texto ficticio; revisadas en emulador. |
+| Teléfono físico | Pendiente. |
+
+[Lectura continua](docs/assets/v-edge-transcript-synthetic.png) · [Vista breve](docs/assets/v-open-transcript-synthetic.png) · [Verificación](docs/open-transcript-verification.json).
 
 ## Android 0.26.2: resumen limpio y a pantalla completa
 

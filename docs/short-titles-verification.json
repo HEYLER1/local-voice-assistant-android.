@@ -1,0 +1,41 @@
+{
+  "version": "0.26.4-assistant",
+  "version_code": 39,
+  "generated_at_utc": "2026-10-26T13:37:22.721510+00:00",
+  "build": {
+    "compiled": true,
+    "installed_on": "emulator-5554",
+    "apk": "v-asistente-android-0.26.4.apk",
+    "sha256": "b12f29a65f79512dceff034602093ae0c2d9e3b2fd977cb2c346617755b11cc7"
+  },
+  "unit_tests": {
+    "passed": 49,
+    "failed": 0
+  },
+  "instrumented_tests": {
+    "passed": 5,
+    "failed": 0,
+    "duration_seconds": 0.229,
+    "classes": [
+      "ConversationNamingPersistenceTest",
+      "ConversationFolderTest"
+    ]
+  },
+  "naming": {
+    "automatic_limit_words": 7,
+    "automatic_limit_characters": 60,
+    "model_instruction": "3 to 7 words, main subject only, no subtitles, questions or lists of subtopics",
+    "existing_subtitle_handling": "Use the complete subject before a colon when it passes the naming checks; never cut a long phrase at an arbitrary word",
+    "pending": "Desconocido",
+    "manual_names": "Preserved in full within the existing user naming limit"
+  },
+  "privacy": {
+    "fixtures": "Fictional eclipse and class conversations; isolated test databases",
+    "external_model_requests": false,
+    "personal_conversations_deleted": false
+  },
+  "limits": [
+    "The tests verify naming rules and persistence, not the accuracy of live model title generation.",
+    "Physical phone not tested in this update."
+  ]
+}

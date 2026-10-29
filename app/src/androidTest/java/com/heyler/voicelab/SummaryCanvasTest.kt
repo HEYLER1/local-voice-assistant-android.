@@ -72,8 +72,8 @@ class SummaryCanvasTest {
         rule.onNodeWithText("Guardar como tarea").performClick()
         rule.runOnIdle{assertEquals(homework,text);assertTrue(source.startsWith("Tarea de clase"))}
         rule.onNodeWithContentDescription("Abrir síntesis del resumen").performClick()
-        rule.onNodeWithText("Guardar resumen").performClick()
-        rule.runOnIdle{assertEquals(state.summary,text);assertTrue(source.startsWith("Resumen generado"))}
+        rule.onNodeWithText("Guardar resumen").performScrollTo().performClick()
+        rule.runOnIdle{assertEquals(KnowledgeSummary.document(state),text);assertTrue(source.startsWith("Resumen generado"))}
     }
     private fun capture(name:String){
         rule.waitForIdle();val bitmap=rule.onRoot().captureToImage()

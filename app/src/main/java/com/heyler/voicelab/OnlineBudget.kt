@@ -4,7 +4,7 @@ import java.io.IOException
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 
-internal class OnlineQuotaException(val waitMillis:Long):IOException("Se alcanzó el límite temporal del servicio gratuito. Se pausaron las solicitudes automáticas; puedes reintentar cuando termine la espera.")
+internal class OnlineQuotaException(val waitMillis:Long,provider:String="el servicio gratuito"):IOException("Se alcanzó el límite de $provider. Se pausaron las solicitudes automáticas; puedes reintentar cuando termine la espera.")
 internal object OnlineBudget {
     const val INTERVAL=30_000L
     fun retryMillis(header:String?,nowMillis:Long=System.currentTimeMillis()):Long{

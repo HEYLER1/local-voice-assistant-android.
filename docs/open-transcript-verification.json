@@ -1,0 +1,64 @@
+{
+  "version": "0.26.3-assistant",
+  "version_code": 38,
+  "generated_at_utc": "2026-10-26T13:32:23.217080+00:00",
+  "build": {
+    "compiled": true,
+    "apk": "v-asistente-android-0.26.3.apk",
+    "sha256": "a76309b0e95aa432a1aed758b25bd935544c99d7a89eefedf0f704db9d4915db",
+    "installed_on": "emulator-5554"
+  },
+  "unit_tests": {
+    "passed": 47,
+    "failed": 0,
+    "new_cases": "Pending titles for greetings and partial hypotheses; explicit topic; evidence-backed analysis title; stability and manual override"
+  },
+  "instrumented_tests": {
+    "passed": 19,
+    "failed": 0,
+    "duration_seconds": 25.636,
+    "classes": [
+      "TranscriptWorkspaceTest",
+      "ConversationNamingPersistenceTest",
+      "ConversationFolderTest",
+      "ConversationPersistenceTest",
+      "FolderInterfaceTest",
+      "ComposerKeyboardTest"
+    ],
+    "checks": [
+      "Transcript scroll viewport spans the complete window rather than a fixed region between toolbars",
+      "Last content and copy action clear the floating composer",
+      "Incoming live text preserves the reading position",
+      "Pending, automatic and manual titles persist across reopening",
+      "Legacy keyword titles appear as Desconocido unless a supported topic or manual name is available",
+      "Partial transcription status survives reopening without becoming a confirmed topic",
+      "Existing folders, sources, questions and keyboard interactions remain usable"
+    ]
+  },
+  "design": [
+    "Continuous reading background behind floating header and composer",
+    "Soft top and bottom transitions instead of hard rectangular clipping",
+    "Copy action moves with the transcript",
+    "Existing navy, violet and green colors retained"
+  ],
+  "naming": {
+    "initial": "Desconocido",
+    "confirmation": "Final explicit topic announcement, or a model title supported by a source-backed passage of at least 200 characters and 35 words with at least two matching subject terms",
+    "stability": "A confirmed automatic name is retained; manual names take precedence",
+    "limits": "Conservative heuristics, not a calibrated semantic confidence score; ASR or model errors can still require renaming",
+    "extra_online_requests": false
+  },
+  "privacy": {
+    "test_content": "Fictional transcript and isolated test databases",
+    "personal_conversations_deleted": false,
+    "external_model_requests_for_ui_tests": false
+  },
+  "visual_review": {
+    "reviewed": true,
+    "device": "Emulator; physical phone not tested",
+    "screenshots": [
+      "assets/v-edge-transcript-synthetic.png",
+      "assets/v-open-transcript-synthetic.png"
+    ]
+  }
+}

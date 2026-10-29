@@ -1,0 +1,69 @@
+{
+  "version": "0.30-assistant",
+  "version_code": 44,
+  "generated_at_utc": "2026-10-29T00:38:12.932386+00:00",
+  "build": {
+    "apk": "v-asistente-android-0.30.apk",
+    "compiled": true,
+    "installed_on": "emulator-5554",
+    "sha256": "01fe9dd134fb29eb0a16457f2e8610c32f2414a2de33ff0a795d1253a0fd4585"
+  },
+  "unit_tests": {
+    "tests": 68,
+    "failures": 0,
+    "errors": 0
+  },
+  "instrumented_tests": {
+    "passed": 25,
+    "failed": 0,
+    "mocked_provider_and_ui": {
+      "passed": 24,
+      "duration_seconds": 24.765
+    },
+    "real_puter_sdk_load": {
+      "passed": 1,
+      "duration_seconds": 3.559,
+      "authenticated": false,
+      "live_ai_responses_verified": false,
+      "ai_requests": 0
+    }
+  },
+  "checks": [
+    "Model-only map augmentation uses the previous conversation organization and a single grouped generation request",
+    "No Wikipedia HTTP client remains in the app; legacy citation URL validation is retained only for old saved maps",
+    "Audio-backed concepts require literal evidence; additional model concepts are labeled IA",
+    "Map concepts and subtitles are visible on a pan-and-zoom native canvas; details, copying and per-conversation persistence remain available",
+    "Pollinations errors and quotas preserve the previous map; the selected provider is never replaced silently",
+    "Puter receives the same system instructions and context through its official JavaScript SDK",
+    "Official Puter SDK loaded on the emulator using an application-local HTTP origin; WebView file and content access are disabled"
+  ],
+  "providers": {
+    "default": "Pollinations Classic",
+    "optional": "Puter · gpt-5.6-luna",
+    "puter_activation": "User connects a Puter session in Settings",
+    "puter_cost": "Limited free allowance; additional use is governed by the Puter account; no upgrade was purchased"
+  },
+  "privacy": {
+    "test_content": "Synthetic eclipse class; no personal recording",
+    "personal_audio_sent": false,
+    "personal_transcripts_sent": false,
+    "puter_account_created": false,
+    "puter_credits_consumed": false,
+    "history_deleted": false,
+    "auth_token_stored_in_conversation_database": false
+  },
+  "limitations": [
+    "Real GPT responses through an authenticated Puter session require user connection and were not tested",
+    "Model-generated additions are not external fact verification and can be wrong",
+    "No physical phone test was performed",
+    "Free provider availability and usage quotas remain outside the app control"
+  ],
+  "screenshot": "assets/v-model-eclipse-map-synthetic.png",
+  "visual_review": "Reviewed; native map with synthetic concepts",
+  "references": [
+    "https://docs.puter.com/AI/chat/",
+    "https://docs.puter.com/Auth/signIn/",
+    "https://docs.puter.com/user-pays-model/",
+    "https://docs.puter.com/supported-platforms/"
+  ]
+}

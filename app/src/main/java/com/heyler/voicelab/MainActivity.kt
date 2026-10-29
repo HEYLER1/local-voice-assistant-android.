@@ -35,6 +35,7 @@ import java.util.Locale
 class MainActivity:ComponentActivity(){
     internal lateinit var assistant:AssistantViewModel
         private set
+    private var requestedAnswerId by mutableStateOf<String?>(null)
     private var tts:TextToSpeech?=null
     private var localVoiceReady=false
     private var videoRequestPending=false
@@ -69,16 +70,19 @@ class MainActivity:ComponentActivity(){
     override fun onCreate(savedInstanceState:Bundle?){
         super.onCreate(savedInstanceState);enableEdgeToEdge(statusBarStyle=SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),navigationBarStyle=SystemBarStyle.dark(android.graphics.Color.TRANSPARENT));assistant=(application as AssistantApplication).assistant;assistant.restoreConversation()
         tts=TextToSpeech(this){status->if(status==TextToSpeech.SUCCESS){val voice=tts?.voices?.firstOrNull{it.locale.language=="es"&&!it.isNetworkConnectionRequired};if(voice!=null){tts?.voice=voice;localVoiceReady=true}}}
+        requestedAnswerId=intent?.getStringExtra(FLOATING_ANSWER_ID)
         setContent{VoiceTheme{AssistantScreen(assistant,
             listen={tts?.stop();if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED)requestListening()else permission.launch(Manifest.permission.RECORD_AUDIO)},
             importSpeech={speechImport.launch(arrayOf("application/zip","application/octet-stream"))},importLanguage={languageImport.launch(arrayOf("*/*"))},
             diagnostics={assistant.releaseModels{startActivity(Intent(this,LabActivity::class.java))}},
             speak={text->if(localVoiceReady){assistant.pause();tts?.speak(text,TextToSpeech.QUEUE_FLUSH,null,"local-answer")}else assistant.state.value=assistant.state.value.copy(status="Instala una voz española sin conexión en los ajustes de Android para escuchar respuestas.")},
-            stopVoice={tts?.stop()},importSoniqo={soniqoImport.launch(arrayOf("application/zip","application/octet-stream"))},floatingControl=::floatingControl)
+            stopVoice={tts?.stop()},importSoniqo={soniqoImport.launch(arrayOf("application/zip","application/octet-stream"))},floatingControl=::floatingControl,requestedAnswerId=requestedAnswerId,onAnswerRequestHandled={requestedAnswerId=null})
             val s by assistant.state.collectAsState()
             DisposableEffect(s.listening||s.generating){if(s.listening||s.generating)window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);onDispose{}}
         }}
     }
+    override fun onNewIntent(intent:Intent){super.onNewIntent(intent);setIntent(intent);requestedAnswerId=intent.getStringExtra(FLOATING_ANSWER_ID)}
+    companion object{internal const val FLOATING_ANSWER_ID="floating-answer-id"}
     override fun onStart(){super.onStart();assistant.resumeForeground()}
     override fun onStop(){if(!isChangingConfigurations)assistant.background();tts?.stop();super.onStop()}
     override fun onDestroy(){tts?.shutdown();super.onDestroy()}
@@ -86,7 +90,7 @@ class MainActivity:ComponentActivity(){
 
 private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val text:String="",val scope:String="",val due:String="",val source:String="Texto escrito por usuario")
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable internal fun AssistantScreen(vm:AssistantViewModel,listen:()->Unit,importSpeech:()->Unit,importLanguage:()->Unit,diagnostics:()->Unit,speak:(String)->Unit,stopVoice:()->Unit,initialTab:Int=0,initialSection:Int=0,initialDrawer:Boolean=false,importSoniqo:()->Unit={},floatingControl:(Boolean)->Unit=vm::setFloatingControl){
+@Composable internal fun AssistantScreen(vm:AssistantViewModel,listen:()->Unit,importSpeech:()->Unit,importLanguage:()->Unit,diagnostics:()->Unit,speak:(String)->Unit,stopVoice:()->Unit,initialTab:Int=0,initialSection:Int=0,initialDrawer:Boolean=false,importSoniqo:()->Unit={},floatingControl:(Boolean)->Unit=vm::setFloatingControl,requestedAnswerId:String?=null,onAnswerRequestHandled:()->Unit={}){
     val s by vm.state.collectAsState()
     var liveSection by rememberSaveable{mutableIntStateOf(initialSection)}
     var tab by remember{mutableIntStateOf(initialTab)}
@@ -103,6 +107,9 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
     val keyboard=LocalSoftwareKeyboardController.current
     val drawer=rememberDrawerState(if(initialDrawer)DrawerValue.Open else DrawerValue.Closed)
     val scope=rememberCoroutineScope()
+    LaunchedEffect(requestedAnswerId){
+        if(requestedAnswerId!=null){sentAnswerId=requestedAnswerId;liveSection=1;tab=0;drawer.close();onAnswerRequestHandled()}
+    }
     var naming by remember{mutableStateOf(false)}
     var namingId by remember{mutableStateOf<Long?>(null)}
     var deletingId by remember{mutableStateOf<Long?>(null)}
@@ -138,21 +145,22 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
     ModalNavigationDrawer(drawerState=drawer,drawerContent={
         ChatSidebar(s,tab,{scope.launch{drawer.close()}},{vm.newConversation();tab=0;liveSection=0;scope.launch{drawer.close()}},{id->vm.openConversation(id);tab=0;liveSection=0;scope.launch{drawer.close()}},{librarySection=1;tab=1;scope.launch{drawer.close()}},{tab=2;scope.launch{drawer.close()}},onRename={id,title->namingId=id;nameDraft=title;naming=true},onDelete={deletingId=it},onCreateFolder={folderEdit=null;folderName=""},onRenameFolder={id,name->folderEdit=id;folderName=name},onDeleteFolder={folderDelete=it},onMove={moving=FolderMove(it)},onNewInFolder={folder->vm.newConversation(folder);tab=0;liveSection=0;scope.launch{drawer.close()}})
     }){
-    Scaffold(containerColor=VoiceBackground,
-        topBar={
+    Scaffold(containerColor=VoiceBackground,contentWindowInsets=if(tab==0)WindowInsets(0,0,0,0)else ScaffoldDefaults.contentWindowInsets,
+        topBar={if(tab!=0)
             Column(Modifier.statusBarsPadding()){
-                if(tab==0)ConversationTopBar(liveSection,{liveSection=it},{keyboard?.hide();scope.launch{drawer.open()}},{vm.newConversation();liveSection=0})
-                else Row(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=8.dp),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){
+                Row(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=8.dp),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){
                     ChatCircleAction("Abrir historial de chats","menu"){scope.launch{drawer.open()}}
                     Spacer(Modifier.width(12.dp));VoiceHeader(s.listening,true,s.starting)
                 }
 
             }
-        },
-        bottomBar={if(tab==0)ChatVoiceComposer(s.listening,s.starting,s.audioLevel,!s.preparing,{if(s.listening||s.starting){if(s.listening)liveSection=2;vm.pause()}else {liveSection=0;listen()}},question,{question=it},{if(question.isNotBlank()&&!s.preparing){vm.ask(question.trim());sentAnswerId=vm.state.value.answers.lastOrNull()?.id;question="";liveSection=1;keyboard?.hide()}})}
+        }
     ){padding->
         when(tab){
-            0->Column(Modifier.fillMaxSize().padding(padding)){key(s.conversationKey){LiveConversation(s,{editing=it},{text,source->draft=SaveDraft(kind=if(source.startsWith("Tarea de clase"))"Tarea"else "Recuerdo",text=text,source=source)},speak,vm::requestSummary,{vm.clearSession();stopVoice()},{vm.stopResponse();stopVoice()},{tab=2},Modifier.weight(1f),liveSection,{liveSection=it},preferredAnswerId=sentAnswerId)}}
+            0->ConversationStage(
+                header={ConversationTopBar(liveSection,{liveSection=it},{keyboard?.hide();scope.launch{drawer.open()}},{vm.newConversation();liveSection=0})},
+                composer={ChatVoiceComposer(s.listening,s.starting,s.audioLevel,!s.preparing,{if(s.listening||s.starting){if(s.listening)liveSection=2;vm.pause()}else {liveSection=0;listen()}},question,{question=it},{if(question.isNotBlank()&&!s.preparing){vm.ask(question.trim());sentAnswerId=vm.state.value.answers.lastOrNull()?.id;question="";liveSection=1;keyboard?.hide()}})}
+            ){readingInsets->key(s.conversationKey){LiveConversation(s,{editing=it},{text,source->draft=SaveDraft(kind=if(source.startsWith("Tarea de clase"))"Tarea"else "Recuerdo",text=text,source=source)},speak,vm::requestSummary,{vm.clearSession();stopVoice()},{vm.stopResponse();stopVoice()},{tab=2},Modifier.fillMaxSize().then(if(liveSection==0)Modifier else Modifier.padding(readingInsets)),liveSection,{liveSection=it},preferredAnswerId=sentAnswerId,transcriptPadding=if(liveSection==0)readingInsets else PaddingValues(0.dp),onResearch=vm::researchSummary)}}
             else->Column(Modifier.fillMaxSize().padding(padding).imePadding().verticalScroll(rememberScrollState()).padding(horizontal=20.dp).padding(top=16.dp,bottom=28.dp),verticalArrangement=Arrangement.spacedBy(14.dp)){
                 when(tab){
                     1->{
@@ -198,14 +206,26 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
                             Toggle("Continuar al salir de la app",s.backgroundListening,vm::setBackgroundListening)
                             Text("Inicia el micrófono aquí y continúa usando otras apps. La notificación permite volver al chat o detener la escucha.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                             Toggle("Botón flotante",s.floatingControl,floatingControl)
-                            Text("Aparece al salir mientras escuchas. Arrástralo para moverlo; tócalo para volver o detener. Android pedirá permiso para mostrarlo sobre otras apps.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Arrastra la burbuja a cualquier borde. Los mensajes duran cuatro segundos: tócalos para abrir la respuesta o deslízalos para ocultarlos. Android pedirá permiso para mostrar sobre otras apps.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         DesignPanel("Respuestas online"){
                             Toggle("Usar respuestas online",s.onlineAnswers,vm::setOnlineAnswers)
-                            Text(OnlineAssistant.NAME,style=MaterialTheme.typography.bodyMedium)
-                            Text("Sin registro ni clave. Necesita Internet. El servicio gratuito admite una solicitud a la vez, cada 30 segundos; las preguntas se analizan en grupos. Se envían la pregunta, bloques de transcripción para organizarlos y hasta tres respuestas previas de este chat para mantener el contexto. No se envían audio ni textos de tu biblioteca.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text("El acceso gratuito tiene límites y depende de la disponibilidad de Pollinations. No se cambia a otro proveedor si falla.",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                            TextButton(onClick={appContext.startActivity(Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://enter.pollinations.ai/privacy")))},contentPadding=PaddingValues(0.dp)){Text("Privacidad de Pollinations ↗")}
+                            Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
+                                FilterChip(selected=s.onlineProvider=="pollinations",onClick={vm.setOnlineProvider("pollinations")},label={Text("Pollinations")})
+                                FilterChip(selected=s.onlineProvider=="puter",onClick={vm.setOnlineProvider("puter")},label={Text("GPT · Puter")})
+                            }
+                            if(s.onlineProvider=="puter"){
+                                Text("GPT-5.6 Luna",style=MaterialTheme.typography.bodyMedium)
+                                Text(s.puterStatus,style=MaterialTheme.typography.bodySmall,color=VoiceGreen)
+                                Text("Sin clave de API. Conecta tu sesión de Puter; admite acceso temporal según su disponibilidad. Puter ofrece una asignación gratuita limitada y el consumo corresponde a tu cuenta. Las ampliaciones de saldo se gestionan allí.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                TextButton(onClick={appContext.startActivity(Intent(appContext,PuterConnectionActivity::class.java))}){Text("Conectar Puter")}
+                                TextButton(onClick={appContext.startActivity(Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://docs.puter.com/user-pays-model/")))}){Text("Uso y límites de Puter ↗")}
+                            }else{
+                                Text(OnlineAssistant.NAME,style=MaterialTheme.typography.bodyMedium)
+                                Text("Sin registro ni clave. Necesita Internet. El servicio gratuito admite una solicitud a la vez, cada 30 segundos; las preguntas se analizan en grupos.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                                TextButton(onClick={appContext.startActivity(Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://enter.pollinations.ai/privacy")))}){Text("Privacidad de Pollinations ↗")}
+                            }
+                            Text("Se envían al proveedor elegido las preguntas y fragmentos de transcripción para organizarlos. El mapa puede añadir explicaciones generales de IA, identificadas como ampliaciones. No se envían audio ni textos de tu biblioteca. Si falla un proveedor, se conserva el contenido y puedes cambiarlo en estos ajustes.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         DesignPanel("Idiomas · Android local"){
                             Text("Español se descarga automáticamente si está disponible. La primera descarga necesita conexión.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
@@ -257,7 +277,7 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
                         }
                     }
                 }
-                if(tab==2)Text("V · Android 0.26.2",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                if(tab==2)Text("V · Android 0.30",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

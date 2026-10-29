@@ -22,7 +22,8 @@ import kotlinx.coroutines.delay
     s:AssistantState,
     onAnswer:(String)->Unit,
     onCopy:(String)->Unit,
-    modifier:Modifier=Modifier
+    modifier:Modifier=Modifier,
+    contentPadding:PaddingValues=PaddingValues(0.dp)
 ){
     val literal=s.lines.joinToString(" "){it.text}
     val copyText=if(s.voiceLabels)s.lines.joinToString("\n\n"){"${it.voice}\n${it.text}"}else literal
@@ -38,18 +39,18 @@ import kotlinx.coroutines.delay
     LaunchedEffect(literal,s.listening,following){
         if(s.listening&&following&&!dragged){withFrameNanos{};scroll.animateScrollTo(scroll.maxValue)}
     }
-    Column(modifier.fillMaxSize().padding(horizontal=16.dp).padding(top=8.dp,bottom=4.dp)){
+    Column(modifier.fillMaxSize().verticalScroll(scroll).semantics{contentDescription="Texto de la conversación"}.padding(contentPadding).padding(horizontal=20.dp).padding(top=4.dp,bottom=12.dp)){
         if(s.status.startsWith("No se pudo")||s.status.startsWith("Permiso")||s.status.startsWith("Error")||s.status.startsWith("Instala una voz")||s.status.startsWith("Espera a")){
             Text(s.status,color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodySmall,modifier=Modifier.padding(bottom=8.dp))
         }
-        Column(Modifier.weight(1f,fill=false).fillMaxWidth().verticalScroll(scroll).semantics{contentDescription="Texto de la conversación"}){
+        Column(Modifier.fillMaxWidth()){
             if(s.voiceLabels)s.lines.forEach{line->
                 Text(line.voice,style=MaterialTheme.typography.labelMedium,color=VoiceAccent)
                 SelectionContainer{Text(linkedTranscript(line.text,s.answers,onAnswer),lineHeight=26.sp,fontSize=16.sp,color=Color(0xFFE1E5F0))}
                 Spacer(Modifier.height(12.dp))
             }else if(literal.isNotBlank())SelectionContainer{Text(linkedTranscript(literal,s.answers,onAnswer),lineHeight=26.sp,fontSize=16.sp,color=Color(0xFFE1E5F0))}
         }
-        if(literal.isNotBlank())Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.End,verticalAlignment=Alignment.CenterVertically){
+        if(literal.isNotBlank())Row(Modifier.fillMaxWidth().padding(top=8.dp),horizontalArrangement=Arrangement.End,verticalAlignment=Alignment.CenterVertically){
             CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 40.dp){
                 IconButton(onClick={onCopy(copyText);copyFeedback++},modifier=Modifier.size(40.dp).semantics{contentDescription="Copiar transcripción"}){
                     VoiceGlyph(if(copied)"check"else "copy",if(copied)VoiceGreen else MaterialTheme.colorScheme.onSurfaceVariant,Modifier.size(19.dp))

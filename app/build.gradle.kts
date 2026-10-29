@@ -41,8 +41,8 @@ android {
         applicationId = "com.heyler.voicelab"
         minSdk = 31
         targetSdk = 37
-        versionCode = 37
-        versionName = "0.26.2-assistant"
+        versionCode = 44
+        versionName = "0.30-assistant"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += "arm64-v8a" }
     }

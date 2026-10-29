@@ -84,7 +84,7 @@ class OnlineAssistantTest{
         val vm=AssistantViewModel(context.applicationContext as Application)
         val store=ViewModelStore();store.put("background-online-test",vm)
         try{
-            vm.temporaryConversation();vm.setOnlineAnswers(true);vm.setAnswers(true);vm.setTranscriptionOnly(false);vm.setBackgroundListening(true)
+            vm.temporaryConversation();vm.setOnlineProvider("pollinations");vm.setOnlineAnswers(true);vm.setAnswers(true);vm.setTranscriptionOnly(false);vm.setBackgroundListening(true)
             vm.requestSpacingMs=0
             vm.online=OnlineAssistant(OkHttpClient.Builder().addInterceptor{chain->response(chain.request(),stream(AnalysisFixtures.eclipse()))}.build())
             vm.setBackgroundServiceActive(true);vm.background()
@@ -95,20 +95,20 @@ class OnlineAssistantTest{
             assertFalse(vm.state.value.languageReady)
         }finally{
             vm.setBackgroundServiceActive(false);vm.background();store.clear()
-            prefs.edit().apply{for(key in listOf("online-answers","answers","transcription-only","background-listening")){(previous[key] as? Boolean)?.let{putBoolean(key,it)}?:remove(key)}}.commit()
+            prefs.edit().apply{for(key in listOf("online-answers","answers","transcription-only","background-listening")){(previous[key] as? Boolean)?.let{putBoolean(key,it)}?:remove(key)};(previous["online-provider"] as? String)?.let{putString("online-provider",it)}?:remove("online-provider")}.commit()
         }
     }
     @Test fun viewModelRoutesAudioQuestionsAndSummaryOnlineWithoutLoadingLocalLlm()=runBlocking{
         val context=InstrumentationRegistry.getInstrumentation().targetContext
         val preferences=context.getSharedPreferences("assistant-options",0)
-        val oldOnline=preferences.getBoolean("online-answers",true);val oldAnswers=preferences.getBoolean("answers",true);val oldOnly=preferences.getBoolean("transcription-only",false)
+        val oldProvider=preferences.getString("online-provider","pollinations");val oldOnline=preferences.getBoolean("online-answers",true);val oldAnswers=preferences.getBoolean("answers",true);val oldOnly=preferences.getBoolean("transcription-only",false)
         val vm=AssistantViewModel(context.applicationContext as Application);val store=ViewModelStore();store.put("online-test",vm)
         val calls=AtomicInteger()
         vm.requestSpacingMs=0
         vm.online=OnlineAssistant(OkHttpClient.Builder().addInterceptor{chain->calls.incrementAndGet();response(chain.request(),stream(AnalysisFixtures.eclipse()))}.build())
         suspend fun waitFor(check:()->Boolean){withTimeout(8000){while(!check())delay(30)}}
         try{
-            vm.temporaryConversation();vm.setOnlineAnswers(true);vm.setAnswers(true);vm.setTranscriptionOnly(false)
+            vm.temporaryConversation();vm.setOnlineProvider("pollinations");vm.setOnlineAnswers(true);vm.setAnswers(true);vm.setTranscriptionOnly(false)
             vm.observe(2101,"La clase trata de astronomía y estudia la posición de la Luna y la Tierra respecto al Sol. ¿Por qué ocurre un eclipse solar?",true)
             waitFor{vm.state.value.answers.any{it.status.startsWith("Lista")}}
             assertEquals(1,calls.get());assertFalse(vm.state.value.languageReady)
@@ -125,7 +125,7 @@ class OnlineAssistantTest{
             assertEquals(3,calls.get());assertTrue(vm.state.value.answers.last().status.contains("desactivadas"))
         }finally{
             vm.background();store.clear()
-            preferences.edit().putBoolean("online-answers",oldOnline).putBoolean("answers",oldAnswers).putBoolean("transcription-only",oldOnly).apply()
+            preferences.edit().putString("online-provider",oldProvider).putBoolean("online-answers",oldOnline).putBoolean("answers",oldAnswers).putBoolean("transcription-only",oldOnly).apply()
         }
     }
 }

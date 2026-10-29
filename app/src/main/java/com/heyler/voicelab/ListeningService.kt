@@ -20,6 +20,7 @@ class ListeningService:Service(){
     private var scope:CoroutineScope?=null
     private var bubble:FloatingVoiceControl?=null
     override fun onBind(intent:Intent?)=null
+    override fun onConfigurationChanged(newConfig:android.content.res.Configuration){super.onConfigurationChanged(newConfig);bubble?.onBoundsChanged()}
     override fun onStartCommand(intent:Intent?,flags:Int,startId:Int):Int{
         if(intent?.action==STOP){assistant.stopFromNotification();finish();return START_NOT_STICKY}
         if(instance===this)return START_NOT_STICKY
@@ -44,14 +45,19 @@ class ListeningService:Service(){
             assistant.state.value=assistant.state.value.copy(starting=false)
             val source=pendingAudio.also{pendingAudio=null}
             if(source!=null)assistant.listenFromAudio(source)else assistant.listen(projection)
-            bubble=FloatingVoiceControl(this,{openConversation()},{assistant.stopFromNotification()})
+            bubble=FloatingVoiceControl(this,{id->openConversation(id)},{assistant.stopFromNotification()})
             scope=CoroutineScope(SupervisorJob()+Dispatchers.Main.immediate)
             scope?.launch{
-                assistant.state.map{SessionUi(it.listening,it.starting,it.appVisible,it.floatingControl,it.backgroundListening)}.distinctUntilChanged().collect{s->
+                var previousAnswers:List<LiveAnswer>?=null
+                var previews=emptyList<FloatingQuestion>()
+                assistant.state.map{
+                    if(it.answers!==previousAnswers){previousAnswers=it.answers;previews=FloatingQuestions.ready(it.answers)}
+                    SessionUi(it.listening,it.starting,it.appVisible,it.floatingControl,it.backgroundListening,it.conversationKey,previews)
+                }.distinctUntilChanged().collect{s->
                     if(!s.listening&&!s.starting){finish();return@collect}
                     if(!s.visible&&!s.background){assistant.background();return@collect}
                     manager.notify(NOTICE,notification(if(!s.listening)"Preparando transcripción…"else if(s.visible)"Transcribiendo · toca para abrir el chat"else "Transcribiendo en segundo plano · toca para volver"))
-                    bubble?.show(!s.visible&&s.background&&s.floating,s.starting)
+                    bubble?.show(!s.visible&&s.background&&s.floating,s.starting,s.questions,s.conversation)
                 }
             }
         }catch(e:Throwable){
@@ -71,7 +77,7 @@ class ListeningService:Service(){
         val open=PendingIntent.getActivity(this,32,Intent(this,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         return Notification.Builder(this,CHANNEL).setSmallIcon(android.R.drawable.ic_btn_speak_now).setContentTitle("V · Escucha activa").setContentText(message).setContentIntent(open).setOngoing(true).setOnlyAlertOnce(true).setCategory(Notification.CATEGORY_SERVICE).setVisibility(Notification.VISIBILITY_PRIVATE).addAction(Notification.Action.Builder(null,"Abrir chat",open).build()).addAction(Notification.Action.Builder(null,"Detener",stop).build()).build()
     }
-    private fun openConversation(){startActivity(Intent(this,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))}
+    private fun openConversation(answerId:String?=null){startActivity(Intent(this,MainActivity::class.java).putExtra(MainActivity.FLOATING_ANSWER_ID,answerId).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))}
     private fun finish(){
         if(instance===this)instance=null
         scope?.cancel();scope=null
@@ -82,7 +88,7 @@ class ListeningService:Service(){
         stopForeground(STOP_FOREGROUND_REMOVE);stopSelf()
     }
     override fun onDestroy(){if(instance===this){instance=null;assistant.stopFromNotification()};finish();super.onDestroy()}
-    private data class SessionUi(val listening:Boolean,val starting:Boolean,val visible:Boolean,val floating:Boolean,val background:Boolean)
+    private data class SessionUi(val listening:Boolean,val starting:Boolean,val visible:Boolean,val floating:Boolean,val background:Boolean,val conversation:Long,val questions:List<FloatingQuestion>)
     companion object{
         private const val CHANNEL="v-listening"
         internal const val NOTICE=52

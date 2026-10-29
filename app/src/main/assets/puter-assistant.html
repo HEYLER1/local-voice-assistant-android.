@@ -1,0 +1,40 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>body{background:#111521;color:#ece8f5;font:16px system-ui;padding:28px;line-height:1.6}h2{font-size:24px}button{background:#b597f4;color:#171120;border:0;border-radius:24px;padding:14px 24px;font:inherit}p{color:#b6b6c9}#status{color:#70dfc0}</style></head><body>
+<h2>GPT con Puter</h2><p>Conecta tu sesión para usar GPT-5.6 Luna. Puter ofrece una asignación gratuita con límites. El consumo se descuenta de tu cuenta; cualquier ampliación se gestiona en Puter.</p>
+<button id="connect" disabled>Conectar Puter</button><p id="status">Cargando conexión…</p>
+<script>
+(()=>{'use strict'; const nonce=__BRIDGE_NONCE__; let active=null; let connected=false;const model='gpt-5.6-luna';
+const send=(type,detail={})=>VBridge.message(nonce,JSON.stringify({type,...detail}));
+const status=text=>document.getElementById('status').textContent=text;
+async function check(){
+ connected=!!puter.auth.isSignedIn();
+ if(!connected){status('Pulsa Conectar Puter para continuar.');send('status',{connected:false});return;}
+ const models=await puter.ai.listModels();
+ const available=models.some(m=>m.id===model||(m.aliases||[]).includes(model));
+ connected=available;
+ status(available?'GPT-5.6 Luna está conectado. Puedes volver a V.':'El modelo solicitado no está disponible en esta sesión.');
+ send('status',{connected:available,unavailable:!available});
+}
+function fail(e,id){const code=String(e?.error?.code||e?.code||e?.error||'unknown');send('error',{id,code});status('No se pudo completar la conexión o consulta. Puedes volver a intentar.');}
+window.VPuter={
+ async run(id,messages,maxTokens){
+  if(active){send('error',{id,code:'busy'});return;}
+  if(!connected||!puter.auth.isSignedIn()){send('error',{id,code:'auth_required'});return;}
+  const controller=new AbortController();active={id,controller};
+  try{
+   const stream=await puter.ai.chat(messages,{model,stream:true,max_tokens:maxTokens,signal:controller.signal});
+   for await(const part of stream){
+    if(controller.signal.aborted)break;
+    if(part?.text)send('delta',{id,text:part.text});
+   }
+   if(!controller.signal.aborted)send('done',{id});
+  }catch(e){if(!controller.signal.aborted)fail(e,id)}finally{if(active?.id===id)active=null}
+ },
+ cancel(id){if(active?.id===id){active.controller.abort();active=null;}}
+};
+const script=document.createElement('script');script.src='https://js.puter.com/v2/';
+script.onload=()=>{document.getElementById('connect').disabled=false;check().catch(e=>fail(e));};
+script.onerror=()=>{status('No se pudo cargar Puter. Revisa tu conexión.');send('error',{code:'sdk_unavailable'});};document.head.appendChild(script);
+document.getElementById('connect').onclick=async()=>{try{await puter.auth.signIn({attempt_temp_user_creation:true});await check();}catch(e){fail(e)}};
+})();
+</script></body></html>

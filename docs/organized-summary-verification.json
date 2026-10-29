@@ -1,0 +1,71 @@
+{
+  "version": "0.28-assistant",
+  "version_code": 42,
+  "generated_at_utc": "2026-10-28T03:11:08.283426+00:00",
+  "build": {
+    "compiled": true,
+    "apk": "v-asistente-android-0.28.apk",
+    "sha256": "e748ed77e22574b02a20c7ad1c44044fb0e0592e765c2254a7a35ab39226aa5f",
+    "installed_on": "emulator-5554",
+    "physical_device_tested": false
+  },
+  "unit_tests": {
+    "passed": 66,
+    "failed": 0
+  },
+  "instrumented_tests": {
+    "passed": 24,
+    "failed": 0,
+    "runs": [
+      {
+        "tests": 23,
+        "seconds": 26.638
+      },
+      {
+        "tests": 1,
+        "seconds": 3.453,
+        "scope": "BackgroundListeningTest#floatingControlsAppearOutsideChatAndStopRecording, isolated instrumentation process"
+      }
+    ],
+    "classes": [
+      "SummaryOrganizationTest",
+      "ClassOrganizationTest",
+      "SummaryDocumentTest",
+      "SummaryCanvasTest",
+      "StudySummaryTest",
+      "ConversationNamingPersistenceTest",
+      "FloatingOverlayTest",
+      "FloatingAnswerNavigationTest",
+      "BackgroundListeningTest#floatingControlsAppearOutsideChatAndStopRecording"
+    ]
+  },
+  "checks": [
+    "Previous section references and new source IDs remain separate; unknown references cannot delete prior notes",
+    "Full previous notes fit the bounded prompt without truncating any supplied new source",
+    "Consolidation rewrites referenced notes and retains source IDs; unreferenced updates preserve old content",
+    "Earlier topics survive beyond twenty sections; changed revisions are excluded from valid prior context",
+    "Established global summary title can broaden while a chosen chat name remains stable",
+    "Readable summary updates live, copies every section and opens its original transcript source",
+    "Canvas navigation, class tasks, exam instructions and history persist",
+    "Circular overlay docks on all four usable edges, previews expire after four seconds and swipe dismissal works in all directions",
+    "Answer deep linking preserves listening and floating stop releases the session"
+  ],
+  "screenshots": [
+    "assets/v-organized-summary-synthetic.png",
+    "assets/v-edge-floating-question-synthetic.png"
+  ],
+  "privacy": {
+    "test_content": "Fictional software metrics, quality and audit notes",
+    "personal_audio_sent": false,
+    "personal_transcripts_sent": false,
+    "real_model_calls_in_tests": false,
+    "existing_history_deleted": false
+  },
+  "limitations": [
+    "Tests verify organization, UI and source handling with fixtures; no benchmark of semantic model accuracy was performed",
+    "Summary uses the transcript and prior notes, without web research or external fact verification",
+    "Physical phone validation remains pending",
+    "Free provider availability and existing request limits still apply"
+  ],
+  "research_reference": "https://aclanthology.org/2022.acl-long.112/"
+}

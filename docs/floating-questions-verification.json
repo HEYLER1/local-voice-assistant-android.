@@ -1,0 +1,66 @@
+{
+  "version": "0.27-assistant",
+  "version_code": 40,
+  "generated_at_utc": "2026-10-26T14:00:35.424438+00:00",
+  "build": {
+    "compiled": true,
+    "installed_on": "emulator-5554",
+    "apk": "v-asistente-android-0.27.apk",
+    "sha256": "0eb360ebd6a21280cfafe07971e73393df4fb2b03095def91a6406f6bc6d8dda"
+  },
+  "unit_tests": {
+    "passed": 53,
+    "failed": 0
+  },
+  "instrumented_tests": {
+    "passed": 6,
+    "failed": 0,
+    "duration_seconds": 15.497,
+    "classes": [
+      "FloatingOverlayTest",
+      "FloatingAnswerNavigationTest",
+      "BackgroundListeningTest#floatingControlsAppearOutsideChatAndStopRecording"
+    ],
+    "checks": [
+      "Actual overlay window size and opacity; non-focusable and non-touch-modal flags",
+      "Dragging keeps the message from covering the handle",
+      "Messages advance in order after ten seconds; unchanged state updates do not restart the timer",
+      "Dismissal, manual reopening, cleanup and repeated exact-answer navigation",
+      "Real foreground service remains listening after opening a floating question and stops through the bubble"
+    ]
+  },
+  "presentation": {
+    "visible_icon_dp": 32,
+    "touch_area_dp": 48,
+    "idle_opacity": 0.38,
+    "message_opacity": 0.58,
+    "interaction_opacity": 0.8,
+    "message_max_width_dp": 224,
+    "message_question_max_lines": 2,
+    "message_answer_max_lines": 2,
+    "message_seconds": 10,
+    "pending_message_limit": 8
+  },
+  "behavior": {
+    "only_completed_coherent_audio_answers": true,
+    "study_suggestions_and_typed_answers_auto_previewed": false,
+    "existing_questions_replayed_when_leaving_chat": false,
+    "history_preserved": true,
+    "extra_model_requests": false,
+    "sound_or_vibration_added": false,
+    "overlay_permission": "Existing optional Android SYSTEM_ALERT_WINDOW setting"
+  },
+  "privacy": {
+    "test_content": "Fictional questions and a generated blank document; no screenshot of another app",
+    "screenshot_method": "Native overlay views drawn with their window opacity over an artificial document background",
+    "personal_conversations_deleted": false,
+    "external_model_requests_for_tests": false,
+    "temporary_emulator_overlay_permission_restored": true
+  },
+  "visual_review": {
+    "reviewed": true,
+    "screenshot": "assets/v-floating-question-synthetic.png",
+    "device": "Emulator only; physical phone not tested"
+  },
+  "android_reference": "https://developer.android.com/reference/android/view/WindowManager.LayoutParams#FLAG_NOT_FOCUSABLE"
+}

@@ -1,0 +1,8 @@
+{
+  "sdk_loaded": true,
+  "origin": "http:\/\/localhost:<private-app-port>",
+  "signed_in": false,
+  "ai_requests": 0,
+  "personal_data_sent": false,
+  "authentication_and_live_ai_verified": false
+}

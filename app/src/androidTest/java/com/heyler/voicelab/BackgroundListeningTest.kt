@@ -119,17 +119,33 @@ class BackgroundListeningTest {
             var shown=false
             await("No floating control appeared"){instrumentation.runOnMainSync{shown=bubble()!=null};shown}
             instrumentation.runOnMainSync{
+                vm.state.value=vm.state.value.copy(answers=listOf(LiveAnswer("floating-example",1,1,"¿Cómo se mide el tamaño de un sistema?","Se elige una medida según el objetivo.","Lista · pregunta contextualizada · IA")))
+            }
+            var preview:android.view.View?=null
+            await("No completed-question message appeared"){
+                instrumentation.runOnMainSync{preview=android.view.inspector.WindowInspector.getGlobalWindowViews().firstOrNull{it.contentDescription=="Pregunta flotante de V"}};preview!=null
+            }
+            instrumentation.runOnMainSync{preview!!.performClick()}
+            await("Tapping the message did not return to V"){vm.state.value.appVisible}
+            assertTrue("Opening an answer must not stop transcription",vm.state.value.listening)
+            // The external launch replaces ActivityScenario's task bookkeeping. Bring the test APK's
+            // blank host forward for a second real onStop, rather than driving the stale scenario.
+            instrumentation.context.startActivity(Intent().setClassName(instrumentation.context.packageName,"androidx.test.core.app.InstrumentationActivityInvoker\$EmptyActivity").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP))
+            await("Returning to the blank test host did not background V"){!vm.state.value.appVisible}
+            await("Floating controls did not return"){instrumentation.runOnMainSync{shown=bubble()!=null};shown}
+            instrumentation.runOnMainSync{
+                assertNull("A question read in V should not replay",android.view.inspector.WindowInspector.getGlobalWindowViews().firstOrNull{it.contentDescription=="Pregunta flotante de V"})
                 val panel=bubble() as android.widget.LinearLayout
-                panel.getChildAt(0).performClick()
-                assertEquals(android.view.View.VISIBLE,panel.getChildAt(1).visibility)
-                assertEquals("Volver a la conversación",panel.getChildAt(1).contentDescription)
                 panel.getChildAt(2).performClick()
+                assertEquals(android.view.View.VISIBLE,panel.getChildAt(0).visibility)
+                assertEquals("Volver a la conversación",panel.getChildAt(0).contentDescription)
+                panel.getChildAt(1).performClick()
                 assertNull("Stopping should remove the overlay",bubble())
             }
             await("Floating Stop left capture alive"){!vm.state.value.listening&&!vm.state.value.backgroundServiceActive}
         }finally{
             instrumentation.runOnMainSync{vm.suspendSession();vm.setBackgroundListening(old.backgroundListening);vm.setFloatingControl(old.floatingControl);vm.setSpeechEngine(old.speechEngine);vm.setAudioSource(old.audioSource);vm.setTranscriptionOnly(old.transcriptionOnly)}
-            runCatching{pipe[1].close()};runCatching{pipe[0].close()};scenario.moveToState(Lifecycle.State.RESUMED);scenario.close()
+            runCatching{pipe[1].close()};runCatching{pipe[0].close()};runCatching{scenario.moveToState(Lifecycle.State.RESUMED);scenario.close()}
             overlayPermission(if(originalOverlay)"allow"else "default")
         }
     }

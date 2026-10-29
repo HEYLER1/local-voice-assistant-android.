@@ -33,10 +33,14 @@ import kotlin.math.roundToInt
 /** A view of existing notes and source-backed excerpts, not inferred causal relationships. */
 internal data class SummaryCanvasNode(
     val id:String,val title:String,val detail:String,
-    val note:OrganizedSection?=null,val category:Int?=null
+    val note:OrganizedSection?=null,val category:Int?=null,val branch:MapBranch?=null
 )
 
 @Composable internal fun SummaryCanvas(topic:String,nodes:List<SummaryCanvasNode>,onOpen:(SummaryCanvasNode?)->Unit,modifier:Modifier,tools:@Composable ()->Unit,preview:String=""){
+    if(nodes.any{it.branch!=null}){
+        ConceptMapCanvas(topic,nodes,onOpen,modifier,tools,preview)
+        return
+    }
     var enlarged by rememberSaveable{mutableStateOf(false)}
     CanvasViewport(topic,nodes,onOpen,modifier,{enlarged=true},tools=tools,preview=preview)
     if(enlarged)Dialog(onDismissRequest={enlarged=false},properties=DialogProperties(usePlatformDefaultWidth=false)){

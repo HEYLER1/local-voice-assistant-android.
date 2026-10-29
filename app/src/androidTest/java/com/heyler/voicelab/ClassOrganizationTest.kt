@@ -38,7 +38,7 @@ class ClassOrganizationTest {
         vm.online=OnlineAssistant(OkHttpClient.Builder().addInterceptor{chain->calls.incrementAndGet();Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(if(quota)429 else 200).message("Fixture").header("Content-Type","text/event-stream").header("Retry-After","60").body((if(quota)"fixture quota"else AnalysisFixtures.sse(AnalysisFixtures.software())).toResponseBody("text/event-stream".toMediaType())).build()}.build())
         suspend fun await(check:()->Boolean){withTimeout(10000){while(!check())delay(30)}}
         try{
-            vm.temporaryConversation();vm.setOnlineAnswers(true);vm.setAnswers(true);vm.setSummary(true);vm.setTranscriptionOnly(false);vm.renameConversation("Mi clase elegida")
+            vm.temporaryConversation();vm.setOnlineProvider("pollinations");vm.setOnlineAnswers(true);vm.setAnswers(true);vm.setSummary(true);vm.setTranscriptionOnly(false);vm.renameConversation("Mi clase elegida")
             vm.importTranscript(lecture)
             await{vm.state.value.answers.size==2&&!vm.state.value.generating}
             assertEquals(1,calls.get());assertEquals("Mi clase elegida",vm.state.value.conversationTitle)
@@ -54,13 +54,13 @@ class ClassOrganizationTest {
             vm.ask("¿Cómo se calcula el tamaño funcional?");assertEquals(3,vm.state.value.answers.size);assertTrue(vm.state.value.answers.last().status.startsWith("En pausa"));assertEquals(failedCalls,calls.get())
         }finally{
             vm.background();holder.clear()
-            prefs.edit().apply{for(key in listOf("online-answers","answers","summary","transcription-only")){(before[key] as? Boolean)?.let{putBoolean(key,it)}?:remove(key)}}.commit()
+            prefs.edit().apply{for(key in listOf("online-answers","answers","summary","transcription-only")){(before[key] as? Boolean)?.let{putBoolean(key,it)}?:remove(key)};(before["online-provider"] as? String)?.let{putString("online-provider",it)}?:remove("online-provider")}.commit()
         }
     }
     @Test fun importingLongTextKeepsEveryWord(){
         val vm=AssistantViewModel(context.applicationContext as Application);val holder=ViewModelStore();holder.put("import",vm)
         val prefs=context.getSharedPreferences("assistant-options",0);val before=prefs.getBoolean("online-answers",true)
-        try{vm.temporaryConversation();vm.setOnlineAnswers(false);val text=(1..1800).joinToString(" "){"término$it"};vm.importTranscript(text)
+        try{vm.temporaryConversation();vm.setOnlineProvider("pollinations");vm.setOnlineAnswers(false);val text=(1..1800).joinToString(" "){"término$it"};vm.importTranscript(text)
             assertTrue(vm.state.value.lines.size>10);assertEquals(text,vm.state.value.lines.joinToString(" "){it.text});assertTrue(vm.state.value.lines.all{it.text.length<=900})
         }finally{vm.background();holder.clear();prefs.edit().putBoolean("online-answers",before).commit()}
     }
