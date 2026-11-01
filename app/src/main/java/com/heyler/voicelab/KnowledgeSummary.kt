@@ -2,17 +2,17 @@ package com.heyler.voicelab
 
 /** A source-backed outline, shared by incremental analysis and the readable summary. */
 internal object KnowledgeSummary {
-    fun cleanTitle(text:String)=ConversationNaming.saved("",text).takeUnless{it==ConversationNaming.UNKNOWN}.orEmpty()
+    fun cleanTitle(text:String)=ConversationNaming.saved("",if(SummaryQuality.usable(text))SummaryQuality.clean(text)else "").takeUnless{it==ConversationNaming.UNKNOWN}.orEmpty()
     fun heading(text:String):String {
-        val title=text.trim().removePrefix("#").trim().replace(Regex("\\s+")," ").trim(' ',':','.')
+        val title=SummaryQuality.clean(text).trim().removePrefix("#").trim().replace(Regex("\\s+")," ").trim(' ',':','.')
         val key=ConversationRules.key(title)
-        if(title.length !in 4..80||title.split(' ').size>12||title.any{it in "¿?"}||
+        if(!SummaryQuality.usable(title)||title.length !in 4..80||title.split(' ').size>12||title.any{it in "¿?"}||
             Regex("(?:tema|seccion|parte|punto|capitulo)(?: \\d+)?").matches(key)||
             key in setOf("resumen","introduccion","desarrollo","conclusion","conclusiones","otros","contenido","ideas principales"))return ""
         return title.replaceFirstChar{it.uppercase()}
     }
     fun previousSections(state:AssistantState)=state.organization.sections.filter{note->
-        note.sources.isNotEmpty()&&note.sources.all{id->state.lines.any{line->
+        SummaryQuality.usable(note.text)&&SummaryQuality.heading(note.title).isNotBlank()&&note.sources.isNotEmpty()&&note.sources.all{id->state.lines.any{line->
             line.id==id&&(line.final||line.edited)&&(state.organization.covered[id]?.let{it==line.revision}?:true)
         }}
     }
@@ -44,7 +44,7 @@ internal object KnowledgeSummary {
 
     fun document(state:AssistantState)=buildList {
         add(title(state))
-        if(state.summary.isNotBlank())add(state.summary.trim())
-        state.organization.sections.forEach{add(it.title+"\n"+it.text)}
+        if(SummaryQuality.usable(state.summary))add(state.summary.trim())
+        previousSections(state).forEach{add(it.title+"\n"+it.text)}
     }.joinToString("\n\n")
 }

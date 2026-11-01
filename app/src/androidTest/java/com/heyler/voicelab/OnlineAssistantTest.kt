@@ -23,6 +23,15 @@ class OnlineAssistantTest{
         .code(code).message("Fixture").header("Content-Type","text/event-stream").body(text.toResponseBody("text/event-stream".toMediaType())).build()
     private fun stream(text:String)="data: "+JSONObject().put("choices",org.json.JSONArray().put(JSONObject().put("delta",JSONObject().put("content",text)).put("finish_reason","stop")))+"\n\ndata: [DONE]\n\n"
 
+    @Test fun preparingConnectionDoesNotSendQuestionsAndDoesNotRepeatImmediately()=runBlocking{
+        val requests=mutableListOf<Request>()
+        val client=OkHttpClient.Builder().addInterceptor{chain->requests.add(chain.request());response(chain.request(),"[]")}.build()
+        val assistant=OnlineAssistant(client);assistant.warmConnection();assistant.warmConnection()
+        assertEquals(1,requests.size);assertEquals("GET",requests.single().method)
+        assertEquals(OnlineAssistant.ENDPOINT+"models",requests.single().url.toString())
+        assertNull(requests.single().body);assertNull(requests.single().header("Authorization"))
+    }
+
     @Test fun streamsOnlyAnswerAndSendsNoCredentialsOrPromptInUrl()=runBlocking{
         var sent:Request?=null
         val client=OkHttpClient.Builder().addInterceptor{chain->
@@ -38,7 +47,7 @@ class OnlineAssistantTest{
         val buffer=Buffer();checkNotNull(request.body).writeTo(buffer)
         val body=JSONObject(buffer.readUtf8())
         assertEquals("openai-fast",body.getString("model"));assertTrue(body.getBoolean("stream"))
-        assertEquals(2,body.getJSONArray("messages").length())
+        assertEquals(2,body.getJSONArray("messages").length());assertEquals("low",body.getString("reasoning_effort"));assertTrue(body.getBoolean("private"))
     }
     @Test fun quotaFailureDoesNotRetryOrExposeProviderBody()=runBlocking{
         val calls=AtomicInteger()
@@ -46,6 +55,25 @@ class OnlineAssistantTest{
         val failure=runCatching{OnlineAssistant(client).generate("Ejemplo ficticio") {fail("No answer expected")}}.exceptionOrNull()
         assertNotNull(failure);assertTrue(failure!!.message.orEmpty().contains("límite"))
         assertFalse(failure.message.orEmpty().contains("raw body"));assertEquals(1,calls.get())
+    }
+    @Test fun outputLimitKeepsTheVisibleFragmentAndIsNotAQuotaError()=runBlocking{
+        val client=OkHttpClient.Builder().addInterceptor{chain->response(chain.request(),"data: {\"choices\":[{\"delta\":{\"content\":\"Fragmento útil.\"},\"finish_reason\":\"length\"}]}\n\n")}.build()
+        val output=StringBuilder()
+        val error=runCatching{OnlineAssistant(client).generate("Ejemplo ficticio"){output.append(it)}}.exceptionOrNull()
+        assertTrue(error is OnlineOutputLimitException);assertFalse(error is OnlineQuotaException)
+        assertEquals("Fragmento útil.",output.toString())
+    }
+    @Test fun analysisUsesLowReasoningAndEnoughBudgetForTheStructuredNotes()=runBlocking{
+        var sent:JSONObject?=null
+        val client=OkHttpClient.Builder().addInterceptor{chain->
+            val buffer=Buffer();chain.request().body!!.writeTo(buffer);sent=JSONObject(buffer.readUtf8())
+            response(chain.request(),stream(AnalysisFixtures.eclipse()))
+        }.build()
+        val result=OnlineAssistant(client).analyze(listOf(SpeechLine(1,"La Luna pasa entre la Tierra y el Sol durante un eclipse solar.",true)),AssistantState())
+        assertTrue(result.summary.isNotBlank());assertEquals("low",sent!!.getString("reasoning_effort"))
+        assertEquals(6144,sent!!.getInt("max_tokens"))
+        assertEquals("json_object",sent!!.getJSONObject("response_format").getString("type"))
+        assertTrue(sent!!.getJSONArray("messages").getJSONObject(0).getString("content").contains("No generes ni respondas preguntas"))
     }
     @Test fun truncatedStreamIsNotReportedAsCompleted()=runBlocking{
         val client=OkHttpClient.Builder().addInterceptor{chain->response(chain.request(),"data: {\"choices\":[{\"delta\":{\"content\":\"Fragmento\"}}]}\n\n")}.build()
@@ -84,7 +112,7 @@ class OnlineAssistantTest{
         val vm=AssistantViewModel(context.applicationContext as Application)
         val store=ViewModelStore();store.put("background-online-test",vm)
         try{
-            vm.temporaryConversation();vm.setOnlineProvider("pollinations");vm.setOnlineAnswers(true);vm.setAnswers(true);vm.setTranscriptionOnly(false);vm.setBackgroundListening(true)
+            vm.temporaryConversation();vm.setAnswerEngine("pollinations");vm.setOnlineAnswers(true);vm.setAnswers(true);vm.setTranscriptionOnly(false);vm.setBackgroundListening(true)
             vm.requestSpacingMs=0
             vm.online=OnlineAssistant(OkHttpClient.Builder().addInterceptor{chain->response(chain.request(),stream(AnalysisFixtures.eclipse()))}.build())
             vm.setBackgroundServiceActive(true);vm.background()
@@ -95,21 +123,25 @@ class OnlineAssistantTest{
             assertFalse(vm.state.value.languageReady)
         }finally{
             vm.setBackgroundServiceActive(false);vm.background();store.clear()
-            prefs.edit().apply{for(key in listOf("online-answers","answers","transcription-only","background-listening")){(previous[key] as? Boolean)?.let{putBoolean(key,it)}?:remove(key)};(previous["online-provider"] as? String)?.let{putString("online-provider",it)}?:remove("online-provider")}.commit()
+            prefs.edit().apply{for(key in listOf("online-answers","answers","transcription-only","background-listening")){(previous[key] as? Boolean)?.let{putBoolean(key,it)}?:remove(key)};(previous["answer-engine"] as? String)?.let{putString("answer-engine",it)}?:remove("answer-engine")}.commit()
         }
     }
-    @Test fun viewModelRoutesAudioQuestionsAndSummaryOnlineWithoutLoadingLocalLlm()=runBlocking{
+    @Test fun obsoleteProviderSelectionStillRoutesAudioQuestionsAndSummaryOnline()=runBlocking{
         val context=InstrumentationRegistry.getInstrumentation().targetContext
         val preferences=context.getSharedPreferences("assistant-options",0)
-        val oldProvider=preferences.getString("online-provider","pollinations");val oldOnline=preferences.getBoolean("online-answers",true);val oldAnswers=preferences.getBoolean("answers",true);val oldOnly=preferences.getBoolean("transcription-only",false)
+        val oldOnline=preferences.getBoolean("online-answers",true);val oldAnswers=preferences.getBoolean("answers",true);val oldOnly=preferences.getBoolean("transcription-only",false)
+        val oldEngine=preferences.getString("answer-engine",null)
+        val obsoleteProvider=preferences.getString("online-provider",null)
+        preferences.edit().putString("online-provider","puter").commit()
         val vm=AssistantViewModel(context.applicationContext as Application);val store=ViewModelStore();store.put("online-test",vm)
         val calls=AtomicInteger()
         vm.requestSpacingMs=0
         vm.online=OnlineAssistant(OkHttpClient.Builder().addInterceptor{chain->calls.incrementAndGet();response(chain.request(),stream(AnalysisFixtures.eclipse()))}.build())
         suspend fun waitFor(check:()->Boolean){withTimeout(8000){while(!check())delay(30)}}
         try{
-            vm.temporaryConversation();vm.setOnlineProvider("pollinations");vm.setOnlineAnswers(true);vm.setAnswers(true);vm.setTranscriptionOnly(false)
-            vm.observe(2101,"La clase trata de astronomía y estudia la posición de la Luna y la Tierra respecto al Sol. ¿Por qué ocurre un eclipse solar?",true)
+            vm.temporaryConversation();vm.setAnswerEngine("pollinations");vm.setOnlineAnswers(true);vm.setAnswers(true);vm.setTranscriptionOnly(false)
+            assertFalse(preferences.contains("online-provider"))
+            vm.observe(2101,"La clase trata de astronomía y estudia la posición de la Luna y la Tierra respecto al Sol. La Luna puede ocultar todo el disco solar en un eclipse total, mientras que en uno parcial solo cubre una parte. ¿Por qué ocurre un eclipse solar?",true)
             waitFor{vm.state.value.answers.any{it.status.startsWith("Lista")}}
             assertEquals(1,calls.get());assertFalse(vm.state.value.languageReady)
             assertTrue(vm.state.value.answers.single().text.contains("Luna"))
@@ -125,7 +157,7 @@ class OnlineAssistantTest{
             assertEquals(3,calls.get());assertTrue(vm.state.value.answers.last().status.contains("desactivadas"))
         }finally{
             vm.background();store.clear()
-            preferences.edit().putString("online-provider",oldProvider).putBoolean("online-answers",oldOnline).putBoolean("answers",oldAnswers).putBoolean("transcription-only",oldOnly).apply()
+            preferences.edit().apply{if(obsoleteProvider==null)remove("online-provider")else putString("online-provider",obsoleteProvider);if(oldEngine==null)remove("answer-engine")else putString("answer-engine",oldEngine)}.putBoolean("online-answers",oldOnline).putBoolean("answers",oldAnswers).putBoolean("transcription-only",oldOnly).apply()
         }
     }
 }

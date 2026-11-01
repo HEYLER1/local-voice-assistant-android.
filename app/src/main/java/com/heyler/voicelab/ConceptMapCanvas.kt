@@ -8,6 +8,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
@@ -44,6 +45,7 @@ import kotlin.math.roundToInt
 }
 
 @Composable private fun ConceptViewport(topic:String,nodes:List<SummaryCanvasNode>,onOpen:(SummaryCanvasNode?)->Unit,modifier:Modifier,tools:@Composable ()->Unit,preview:String,onExpand:(()->Unit)?=null,onClose:(()->Unit)?=null){
+    var toolsHeight by remember{mutableIntStateOf(0)}
     val density=LocalDensity.current
     val measurer=rememberTextMeasurer()
     val headingStyle=TextStyle(fontSize=18.sp,lineHeight=23.sp,fontWeight=FontWeight.SemiBold)
@@ -69,14 +71,14 @@ import kotlin.math.roundToInt
         val width=with(density){maxWidth.toPx()};val height=with(density){maxHeight.toPx()}
         val fit=(maxWidth/worldWidth).coerceAtMost(1f)
         val scale=fit*zoom
-        val base=Offset((width-with(density){worldWidth.toPx()}*fit)/2,with(density){56.dp.toPx()})
+        val base=Offset((width-with(density){worldWidth.toPx()}*fit)/2,maxOf(with(density){56.dp.toPx()},toolsHeight.toFloat()+with(density){8.dp.toPx()}))
         fun bounded(value:Offset,nextZoom:Float=zoom)=Offset(value.x.coerceIn(-width*3,width*3),value.y.coerceIn(-with(density){worldHeight.toPx()}*fit*nextZoom,height*.8f))
         fun change(nextValue:Float){val next=nextValue.coerceIn(.5f,3.5f);val center=Offset(width/2,height/2)-base;pan=bounded(center-(center-pan)*(next/zoom),next);zoom=next}
         Canvas(Modifier.fillMaxSize()){
             val step=28.dp.toPx();var x=12.dp.toPx()
             while(x<size.width){var y=12.dp.toPx();while(y<size.height){drawCircle(VoiceAccent.copy(alpha=.08f),.6.dp.toPx(),Offset(x,y));y+=step};x+=step}
         }
-        Box(Modifier.fillMaxSize().pointerInput(width,height){detectTransformGestures{centroid,delta,factor,_->
+        Box(Modifier.fillMaxSize().pointerInput(width,height,base.y){detectTransformGestures{centroid,delta,factor,_->
             val next=(zoom*factor).coerceIn(.5f,3.5f);val local=centroid-base
             pan=bounded(local-(local-pan)*(next/zoom)+delta,next);zoom=next
         }}){
@@ -115,7 +117,7 @@ import kotlin.math.roundToInt
                 }
             }
         }
-        Row(Modifier.align(Alignment.TopStart).padding(4.dp),verticalAlignment=Alignment.CenterVertically){tools()}
+        Row(Modifier.align(Alignment.TopStart).padding(4.dp).onSizeChanged{toolsHeight=it.height},verticalAlignment=Alignment.CenterVertically){tools()}
         IconButton(onClick={if(onClose!=null)onClose()else onExpand?.invoke()},modifier=Modifier.align(Alignment.TopEnd).padding(4.dp).semantics{contentDescription=if(onClose!=null)"Cerrar lienzo ampliado"else "Ampliar lienzo del resumen"}){VoiceGlyph(if(onClose!=null)"close"else "expand",MaterialTheme.colorScheme.onSurfaceVariant,Modifier.size(20.dp))}
         Surface(Modifier.align(Alignment.BottomEnd).padding(8.dp),shape=RoundedCornerShape(50),color=Color(0xFF202538)){
             Row(verticalAlignment=Alignment.CenterVertically){

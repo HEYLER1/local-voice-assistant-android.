@@ -14,6 +14,11 @@ class ConversationNamingTest {
         val state=AssistantState(lines=listOf(SpeechLine(1,"Hola, buenos días.",true),SpeechLine(2,"Hoy vamos a estudiar métricas de software.",true)))
         assertEquals("Métricas de software",ConversationNaming.display(state))
     }
+    @Test fun presentTenseTopicAnnouncementWorksWithoutTheOnlineModel(){
+        val state=AssistantState(lines=listOf(SpeechLine(1,"Hoy estudiamos los eclipses solares. La Luna se interpone entre la Tierra y el Sol.",true)))
+        assertEquals("Los eclipses solares",ConversationNaming.display(state))
+        assertEquals("Los eclipses solares",KnowledgeSummary.title(state))
+    }
     @Test fun anAnalysisTitleNeedsEnoughRelevantSourceMaterial(){
         val org=ClassOrganization("Métricas de software",sections=listOf(OrganizedSection("Tamaño","Un apunte.",listOf(1))))
         val short=AssistantState(organization=org,lines=listOf(SpeechLine(1,"Métricas de software.",true)))

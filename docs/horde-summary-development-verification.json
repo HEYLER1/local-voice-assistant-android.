@@ -1,0 +1,16 @@
+{
+  "status": "source-only; no APK requested or produced",
+  "unit_tests": {
+    "tests": 73,
+    "failures": 0
+  },
+  "android_test_sources": "compiled; not executed",
+  "live_horde": "unverified: connection reset when fetching the public catalog",
+  "local_qwen35_replacement": false,
+  "provider_selection": "active Qwen3.5 family, lowest estimated queue and generation cost; no alternate family fallback",
+  "known_limits": [
+    "Volunteer queues are not guaranteed real-time",
+    "No new emulator or physical-device execution without packaging",
+    "Existing local model is reused, not renamed as Qwen3.5"
+  ]
+}

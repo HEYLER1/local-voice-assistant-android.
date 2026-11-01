@@ -55,18 +55,16 @@ internal object AnalysisProtocol {
     fun prompt(lines:List<SpeechLine>,previous:AssistantState)=header(previous)+
         contextSections(lines,previous).joinToString(""){entry(it)}+"BLOQUE:\n"+block(lines)
     fun parse(raw:String,snapshot:List<SpeechLine>,previous:AssistantState=AssistantState()):AnalysisResult{
-        val cleaned=raw.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
-        require(cleaned.startsWith('{')&&cleaned.endsWith('}')){"El análisis no devolvió el formato esperado. No se modificaron tus apuntes."}
-        val data=JSONObject(cleaned);val byId=snapshot.mapIndexed{index,line->(index+1).toLong() to line}.toMap()
+        val data=StructuredReply.objectValue(raw);val byId=snapshot.mapIndexed{index,line->(index+1).toLong() to line}.toMap()
         fun clean(text:String,max:Int)=text.trim().filter{it=='\n'||!it.isISOControl()}.take(max)
-        val title=KnowledgeSummary.cleanTitle(clean(data.optString("title"),120))
+        val title=KnowledgeSummary.cleanTitle(clean(StructuredReply.string(data,"title"),120))
         val previousSections=contextSections(snapshot,previous).associate{it.index+1 to it.value}
         val topics=data.optJSONArray("topics")?.let{a->(0 until minOf(a.length(),8)).map{clean(a.optString(it),100)}.filter{it.isNotBlank()}.distinct()}.orEmpty()
         val sections=data.optJSONArray("sections")?.let{a->(0 until minOf(a.length(),8)).mapNotNull{i->
             val item=a.optJSONObject(i)?:return@mapNotNull null
             val references=item.optJSONArray("previous")?.let{ids->(0 until minOf(ids.length(),20)).mapNotNull{previousSections[ids.optInt(it)]}.distinct()}.orEmpty()
             val ids=(references.flatMap{it.sources}+item.optJSONArray("sources")?.let{ids->(0 until minOf(ids.length(),40)).map{ids.optLong(it)}.mapNotNull{byId[it]?.id}}.orEmpty()).distinct()
-            val heading=KnowledgeSummary.heading(clean(item.optString("title"),100));val text=clean(item.optString("text"),1400)
+            val heading=KnowledgeSummary.heading(clean(StructuredReply.string(item,"title"),100));val text=clean(StructuredReply.string(item,"text"),1400)
             if(ids.isEmpty()||heading.isBlank()||text.isBlank())null else OrganizedSection(heading,text,ids,references.map{it.title})
         }}.orEmpty()
         val questions=mutableListOf<AnalyzedQuestion>()
@@ -88,7 +86,7 @@ internal object AnalysisProtocol {
             if(suggested&&questions.count{it.suggested}>=4)continue
             questions.add(AnalyzedQuestion(question,answer,line.id,quote,suggested,evidenceSources))
         }}
-        val summary=clean(data.optString("summary"),3500)
+        val summary=clean(StructuredReply.string(data,"summary"),3500)
         require(summary.isNotBlank()||sections.isNotEmpty()||questions.isNotEmpty()){"El análisis quedó vacío. Se conservó la organización anterior."}
         return AnalysisResult(ClassOrganization(title,topics,sections,snapshot.associate{it.id to it.revision}),summary,questions)
     }

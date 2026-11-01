@@ -1,0 +1,41 @@
+{
+  "date": "2026-10-31",
+  "change": "Output limit handling and structured summary budget",
+  "outputTokens": {
+    "question": 2048,
+    "summary": 6144,
+    "map": 8192
+  },
+  "reasoning": "low",
+  "unitTests": {
+    "tests": 83,
+    "failures": 0
+  },
+  "controlledAndroidTests": {
+    "tests": 20,
+    "failures": 0
+  },
+  "liveSummary": {
+    "passed": true,
+    "runSeconds": 70.377,
+    "result": {
+      "fixture": "fictional-astronomy",
+      "durationMs": 50317.741482,
+      "summary": "En la clase se estudió el fenómeno de los eclipses solares, explicando cómo la Luna se interpone entre la Tierra y el Sol y puede bloquear su luz. Se distinguen dos tipos principales: eclipses totales, donde el disco solar queda completamente cubierto, y eclipses parciales, donde solo una fracción del disco se oculta. La inclinación de la órbita lunar hace que estos eventos no ocurran cada mes, aunque la Luna pasa por la línea de eclíptica cada mes. Se revisaron las condiciones geométricas que permiten la aparición de un eclipse y la diferencia entre los dos tipos de eclipses. El objetivo fue comprender la mecánica y la frecuencia de estos fenómenos astronómicos.",
+      "title": "Eclipses solares",
+      "sections": 3
+    }
+  },
+  "verified": [
+    "Length termination is distinct from rate limits",
+    "Partial answer text remains visible and is not mixed with another provider",
+    "An incomplete summary preserves previous notes and map",
+    "Structured summary requests do not ask the model to generate answers",
+    "A real summary returned parseable structured notes under the new configuration"
+  ],
+  "limitations": [
+    "The initial combined real-service run answered the question but failed to connect during the summary; the standalone summary passed",
+    "Higher output allowances do not remove service-side limits",
+    "Only fictional class text was used, not personal recordings"
+  ]
+}

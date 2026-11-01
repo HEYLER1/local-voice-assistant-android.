@@ -27,7 +27,7 @@ import androidx.compose.ui.unit.sp
 @Composable fun StudySummaryPanel(s:AssistantState,onQuestion:(String)->Unit,onEdit:(SpeechLine)->Unit,onSave:(String,String)->Unit,onRefresh:()->Unit,modifier:Modifier=Modifier,onCopy:((String)->Unit)?=null,onResearch:()->Unit=onRefresh){
     val guide=remember(s.lines){StudyGuide.build(s.lines)}
     val lesson=remember(s.lines){LessonMemory.build(s.lines)}
-    val map=s.organization.map
+    val map=s.organization.map?.takeIf{SummaryQuality.usable(it.overview)&&SummaryQuality.heading(it.title).isNotBlank()}
     val baseTopic=remember(s.organization,s.lines,s.automaticTitle){KnowledgeSummary.title(s)}
     val topic=map?.title?:baseTopic
     val document=remember(topic,s.summary,s.organization){map?.let{ResearchedMapDocument.text(it)}?:KnowledgeSummary.document(s)}
@@ -39,34 +39,37 @@ import androidx.compose.ui.unit.sp
     val nodes=remember(s.organization,guide,lesson,s.answers.size){
         if(map!=null)map.branches.mapIndexed{index,branch->SummaryCanvasNode("branch:$index",branch.title,"",branch=branch)}else buildList{
             val reserved=listOf(lesson.tasks.isNotEmpty(),lesson.exams.isNotEmpty(),s.answers.isNotEmpty()).count{it}
-            if(s.organization.sections.isNotEmpty())s.organization.sections.take(6-reserved).forEach{note->add(SummaryCanvasNode("note:${note.title}",note.title,"Apuntes organizados",note=note))}
-            else if(guide.concepts.isNotEmpty())guide.concepts.take(3).forEach{concept->add(SummaryCanvasNode("concept:${concept.excerpt.sourceId}:${concept.term}",concept.term,"Concepto del audio",note=OrganizedSection(concept.term,concept.excerpt.text,listOf(concept.excerpt.sourceId))))}
-            else guide.ideas.take(3).forEachIndexed{index,idea->val title=idea.text.split(Regex("\\s+")).take(6).joinToString(" ");add(SummaryCanvasNode("idea:$index",title,"Extracto del audio",note=OrganizedSection(title,idea.text,listOf(idea.sourceId))))}
+            if(s.organization.sections.isNotEmpty())KnowledgeSummary.previousSections(s).take(6-reserved).forEach{note->add(SummaryCanvasNode("note:${note.title}",note.title,"Apuntes organizados",note=note))}
             if(lesson.tasks.isNotEmpty())add(SummaryCanvasNode("tasks","Por preparar","${lesson.tasks.size} ${if(lesson.tasks.size==1)"indicación"else "indicaciones"}",category=4))
             if(lesson.exams.isNotEmpty())add(SummaryCanvasNode("exam","Examen","${lesson.exams.size} ${if(lesson.exams.size==1)"aviso"else "avisos"}",category=5))
             if(s.answers.isNotEmpty())add(SummaryCanvasNode("review","Preguntas","${s.answers.size} ${if(s.answers.size==1)"pregunta"else "preguntas"}",category=2))
-            if(size<6&&guide.figures.isNotEmpty())add(SummaryCanvasNode("figures","Cifras","${guide.figures.size} ${if(guide.figures.size==1)"extracto"else "extractos"}",category=3))
+
         }.take(6)
     }
-    val canRefresh=s.onlineAnswers&&!s.generating&&s.lines.sumOf{it.text.length}>=100&&!(s.transcriptionOnly&&(s.listening||s.starting))
-    val issue=s.summaryError.ifBlank{s.onlineNotice}
+    val canRefresh=!s.summaryPending&&!s.analysisRunning&&!s.researchRunning
+    val canResearch=canRefresh&&s.onlineAnswers&&s.lines.any{it.final||it.edited}
+    val issue=SummaryIssues.display(s.summaryError)
     val tools:@Composable ()->Unit={
         IconButton(onClick={inspected="browse"},modifier=Modifier.size(40.dp).semantics{contentDescription="Explorar apuntes"}){VoiceGlyph("notes",MaterialTheme.colorScheme.onSurfaceVariant,Modifier.size(20.dp))}
-        IconButton(onClick=onResearch,enabled=canRefresh&&KnowledgeSummary.title(s)!=ConversationNaming.UNKNOWN,modifier=Modifier.size(40.dp).semantics{contentDescription=if(s.researchRunning)"Ampliando el tema"else "Ampliar y organizar mapa"}){if(s.researchRunning)CircularProgressIndicator(Modifier.size(18.dp),strokeWidth=2.dp,color=VoiceGreen)else VoiceGlyph("search",if(canRefresh)VoiceGreen else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha=.4f),Modifier.size(20.dp))}
-        IconButton(onClick=onRefresh,enabled=canRefresh,modifier=Modifier.size(40.dp).semantics{contentDescription=if(s.analysisRunning)"Actualizando resumen"else "Actualizar resumen"}){
-            if(s.analysisRunning&&!s.researchRunning)CircularProgressIndicator(Modifier.size(18.dp),strokeWidth=2.dp,color=VoiceAccent)
-            else VoiceGlyph("refresh",if(canRefresh)VoiceAccent else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha=.4f),Modifier.size(20.dp))
+        IconButton(onClick=onResearch,enabled=canResearch&&KnowledgeSummary.title(s)!=ConversationNaming.UNKNOWN,modifier=Modifier.size(40.dp).semantics{contentDescription=if(s.researchRunning)"Ampliando el tema"else "Ampliar y organizar mapa"}){if(s.researchRunning)CircularProgressIndicator(Modifier.size(18.dp),strokeWidth=2.dp,color=VoiceGreen)else VoiceGlyph("search",if(canResearch)VoiceGreen else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha=.4f),Modifier.size(20.dp))}
+        TextButton(onClick=onRefresh,enabled=canRefresh,modifier=Modifier.semantics{contentDescription="Generar resumen"}){
+            if(s.summaryPending||s.analysisRunning)CircularProgressIndicator(Modifier.size(16.dp),strokeWidth=2.dp,color=VoiceAccent)else Text("Generar resumen",color=VoiceAccent)
         }
         if(issue.isNotBlank())IconButton(onClick={inspected="status"},modifier=Modifier.size(40.dp).semantics{contentDescription="Ver aviso del resumen"}){Text("!",color=VoiceAccent,fontWeight=FontWeight.Bold)}
     }
     BoxWithConstraints(modifier.fillMaxWidth()){
         val viewport=if(constraints.hasBoundedHeight)Modifier.fillMaxSize()else Modifier.fillMaxWidth().height(560.dp)
         if(s.lines.isEmpty()&&s.summary.isBlank())Box(viewport){
-            Row(Modifier.align(Alignment.TopStart).padding(start=8.dp)){tools()}
+            Column(Modifier.align(Alignment.TopStart).padding(start=8.dp)){
+                Row{tools()}
+                SummaryFeedback(s.summaryStatus,issue)
+            }
             VoiceGlyph("spark",MaterialTheme.colorScheme.outline,Modifier.align(Alignment.Center).size(36.dp).semantics{contentDescription="Resumen sin contenido"})
         }else {
-            SummaryCanvas(topic,nodes,{inspected=it?.id?:"summary"},viewport,tools,ReadableAnswer.format(map?.overview?:s.summary))
-            if(map==null&&canRefresh&&KnowledgeSummary.title(s)!=ConversationNaming.UNKNOWN)TextButton(onClick=onResearch,modifier=Modifier.align(Alignment.BottomStart).padding(8.dp)){Text("Ampliar y organizar mapa",color=VoiceGreen)}
+            SummaryCanvas(topic,nodes,{inspected=it?.id?:"summary"},viewport,{
+                Column{Row{tools()};SummaryFeedback(s.summaryStatus,issue)}
+            },ReadableAnswer.format(map?.overview?:SummaryQuality.display(s.summary)))
+            if(map==null&&canResearch&&KnowledgeSummary.title(s)!=ConversationNaming.UNKNOWN)TextButton(onClick=onResearch,modifier=Modifier.align(Alignment.BottomStart).padding(8.dp)){Text("Ampliar y organizar mapa",color=VoiceGreen)}
         }
     }
     val node=nodes.firstOrNull{it.id==inspected}
@@ -92,7 +95,7 @@ import androidx.compose.ui.unit.sp
                         }
                     }
                 }
-                StudyContent(section,s,guide,lesson,{inspected=null;onQuestion(it)},{inspected=null;onEdit(it)},{text,source->inspected=null;onSave(text,source)})
+                StudyContent(section,s.copy(summary=SummaryQuality.display(s.summary),organization=s.organization.copy(sections=KnowledgeSummary.previousSections(s))),guide,lesson,{inspected=null;onQuestion(it)},{inspected=null;onEdit(it)},{text,source->inspected=null;onSave(text,source)})
             }else if(inspected=="status"){
                 Text(issue,style=MaterialTheme.typography.bodyMedium)
                 TextButton(onClick={inspected=null;onRefresh()},enabled=canRefresh){Text("Reintentar")}
@@ -209,6 +212,11 @@ import androidx.compose.ui.unit.sp
         }
         HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant)
     }
+}
+@Composable private fun SummaryFeedback(progress:String,issue:String){
+    val text=progress.ifBlank{issue}
+    if(text.isNotBlank())Text(text,modifier=Modifier.widthIn(max=340.dp).padding(horizontal=8.dp,vertical=4.dp),
+        style=MaterialTheme.typography.bodySmall,maxLines=3,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis,color=if(progress.isNotBlank())VoiceAccent else MaterialTheme.colorScheme.onSurfaceVariant)
 }
 @Composable private fun StudySource(excerpt:StudyExcerpt,s:AssistantState,onEdit:(SpeechLine)->Unit){
     s.lines.firstOrNull{it.id==excerpt.sourceId}?.let{line->TextButton(onClick={onEdit(line)},contentPadding=PaddingValues(0.dp)){Text("Ver en el texto ↗",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)}}

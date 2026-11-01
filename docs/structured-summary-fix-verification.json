@@ -1,0 +1,40 @@
+{
+  "date": "2026-10-31",
+  "issue": "Malformed model JSON was surfaced as a long parser error over the summary map",
+  "changes": [
+    "Request json_object output for online summaries and maps",
+    "Parse a complete JSON object and require text fields to be strings",
+    "Do not propagate JSONException payloads to UI",
+    "Sanitize old raw parser errors at rendering boundary",
+    "Limit the notice to three lines and offset the canvas below the toolbar",
+    "Preserve previous summary and map when parsing fails"
+  ],
+  "validation": {
+    "unitTests": 83,
+    "controlledAndroidTestsUnique": 31,
+    "liveSummaryTests": 1,
+    "firstRun": {
+      "tests": 30,
+      "seconds": 50.005,
+      "failures": 0
+    },
+    "layoutRun": {
+      "tests": 6,
+      "seconds": 14.953,
+      "failures": 0
+    },
+    "syntheticScreenshot": "assets/v-safe-summary-error-synthetic.png",
+    "liveSummary": {
+      "fixture": "fictional-astronomy",
+      "durationMs": 13248.736339,
+      "summary": "Se estudian los eclipses solares, explicando cómo la Luna se interpone entre la Tierra y el Sol y puede cubrir parcial o totalmente su luz. Se distinguen los eclipses totales y parciales según la fracción del disco solar que queda visible. La inclinación de la órbita lunar impide que ocurran eclipses cada mes.",
+      "title": "Eclipses Solares",
+      "sections": 3
+    }
+  },
+  "limitations": [
+    "JSON mode is requested from the provider; results are still validated and may be rejected",
+    "No attempt is made to invent or recover missing content from a malformed response",
+    "Functional synthetic and emulator checks do not establish factual accuracy"
+  ]
+}

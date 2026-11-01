@@ -1,0 +1,36 @@
+{
+  "version": "0.30.1-assistant",
+  "version_code": 45,
+  "change": "Remove the optional Puter integration",
+  "build": "successful",
+  "unit_tests": {
+    "tests": 68,
+    "failures": 0,
+    "errors": 0
+  },
+  "instrumented_tests": {
+    "tests": 21,
+    "failures": 0,
+    "duration_seconds": 19.153,
+    "device": "Android API 37 ARM64 emulator",
+    "transport": "Synthetic intercepted HTTP responses; no live AI requests"
+  },
+  "verified": [
+    "Legacy provider preference is removed and questions and summaries use the existing anonymous transport",
+    "Context reaches map generation in one grouped request",
+    "Quota handling preserves existing notes and map",
+    "Conversation map persistence and source attribution remain functional",
+    "Removed SDK asset, connection Activity, runtime and localhost cleartext exception",
+    "No Puter classes or SDK URL in APK DEX; no removed SDK asset or network-security resource"
+  ],
+  "apk": {
+    "path": "dist/v-asistente-android-0.30.1.apk",
+    "bytes": 120746683,
+    "sha256": "04fe67dc3f9f577a178483e44d0996d66d02fc4a877187b2e1aa109f65c270f9"
+  },
+  "limitations": [
+    "No real online model generation was tested",
+    "No physical phone was available",
+    "Historical version 0.30 reports describe the former optional integration"
+  ]
+}

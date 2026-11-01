@@ -12,6 +12,22 @@ import org.junit.Test
 import java.io.IOException
 
 class ResearchPipelineTest {
+    @Test fun modelMapKeepsTheClassContextWithoutWebLookup()=runBlocking{
+        var calls=0;var system="";var prompt=""
+        val provider=OnlineAssistant(OkHttpClient.Builder().addInterceptor{chain->
+            calls++
+            val buffer=okio.Buffer();chain.request().body!!.writeTo(buffer)
+            val messages=JSONObject(buffer.readUtf8()).getJSONArray("messages")
+            system=messages.getJSONObject(0).getString("content");prompt=messages.getJSONObject(1).getString("content")
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("Fixture")
+                .header("Content-Type","text/event-stream").body(AnalysisFixtures.sse(ResearchFixtures.response()).toResponseBody("text/event-stream".toMediaType())).build()
+        }.build())
+        val result=provider.researchedMap("Eclipses solares",ResearchFixtures.lines,emptyList(),ResearchFixtures.state())
+        assertEquals(1,calls);assertEquals(8,result.branches.size)
+        assertTrue(result.references.isEmpty());assertTrue(result.branches.flatMap{it.points}.all{it.origin=="model"})
+        assertTrue(prompt.contains("ANÁLISIS PREVIO"));assertTrue(system.contains("sin consultar páginas web"))
+        assertFalse(prompt.contains("ARTÍCULOS CONSULTADOS"))
+    }
     @Test fun unsupportedFactsAndInventedReferencesAreExcluded(){
         val data=JSONObject(ResearchFixtures.response());val branch=data.getJSONArray("branches").getJSONObject(0)
         val points=branch.getJSONArray("points")

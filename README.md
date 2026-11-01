@@ -2,9 +2,83 @@
 
 ![Logo de V](docs/assets/v-logo.svg)
 
-Asistente para estudiantes en Kotlin y Jetpack Compose: transcripción, respuestas online sin registro ni clave, contexto de clase, carpetas, tareas, avisos de examen, historial en el dispositivo y escucha en segundo plano con botón flotante.
+Asistente para estudiantes en Kotlin y Jetpack Compose: transcripción, respuestas locales u online, contexto de clase, carpetas, tareas, avisos de examen, historial en el dispositivo y escucha en segundo plano con botón flotante.
 
-## Interfaz actual · 0.30
+## Validación del formato del resumen
+
+Las solicitudes de resumen y mapa piden salida `json_object`. La app valida el objeto completo y exige texto en los campos visibles. Un error de análisis no vuelca el JSON ni la transcripción en la interfaz: conserva los apuntes y el mapa anteriores y muestra un aviso breve. Los avisos técnicos antiguos también se filtran al mostrarlos. El mapa reserva espacio debajo del aviso y conserva sus gestos de desplazamiento y ampliación.
+
+Se reprodujo un JSON mal formado como el observado en pantalla, se comprobó la conservación de datos y se verificó un resumen real con Pollinations. [Informe](docs/structured-summary-fix-verification.json) · [Captura con contenido ficticio](docs/assets/v-safe-summary-error-synthetic.png).
+
+## Corrección de respuestas cortadas
+
+Las solicitudes online usan razonamiento bajo y márgenes de salida distintos para preguntas (2.048 tokens), apuntes estructurados (6.144) y mapas (8.192). Son máximos de generación, no una longitud obligatoria. El resumen solicita exclusivamente síntesis y secciones; las preguntas se procesan por separado. El límite de transporte SSE admite la salida ampliada, conservando límites de tamaño de texto visible.
+
+Si el servicio informa `finish_reason: length`, la respuesta se identifica como parcial y el texto recibido permanece visible; no se mezcla automáticamente con otro proveedor. Un JSON de resumen cortado se rechaza y se conservan los apuntes y el mapa anteriores. Ampliar el presupuesto reduce cortes evitables, pero no elimina los límites propios del proveedor.
+
+Validación: **83 pruebas unitarias y 20 regresiones Android correctas**, más un resumen real con Pollinations y texto ficticio. [Informe del corte de salida](docs/output-limit-fix-verification.json).
+
+## Rapidez de respuestas y proxy del emulador
+
+El modo Automático prueba primero Pollinations si está libre y mantiene AI Horde y Qwen local como alternativas. Un resumen solicitado reserva su turno de Pollinations. Si Horde deniega el acceso, la app espera cinco minutos antes de volver a probar ese proveedor, sin detener los demás.
+
+En seis consultas ficticias desde el emulador con el proxy de macOS, el primer texto tardó entre **7,41 y 45,83 segundos**. Acortar instrucciones y limitar más la respuesta no mostró una mejora consistente. Se conserva el perfil actual con razonamiento bajo. Desactivar el razonamiento devolvió HTTP 400; Horde devolvió HTTP 403. Estas mediciones pequeñas incluyen variaciones del servicio y no garantizan una velocidad fija. [Resultados y metodología](docs/answer-latency-proxy-experiment.json).
+
+En una comprobación breve de reutilización, preparar HTTPS tomó **18,61 s**; después, asignar la conexión a la pregunta tomó **14 ms** y el primer texto llegó en **3,37 s**. La preparación se inicia en paralelo al micrófono mediante una consulta pública al catálogo, sin inferencia, y no se repite de inmediato. Esta prueba usó una suma con respuesta de un token; no equivale a una medición de preguntas complejas. El costo de preparación se adelanta, no desaparece. Validación del ajuste: **83 pruebas unitarias, 20 regresiones Android y una comprobación real de conexión correctas**.
+
+Para arrancar el emulador con el proxy vigente, desde la raíz Android usa `python3 tools/run_emulator.py`. El lanzador consulta macOS en cada arranque y conserva los datos del dispositivo. No almacena la dirección del proxy en el proyecto ni la impone a teléfonos físicos. Usa `--avd NOMBRE` para otro dispositivo virtual o `--direct` para omitir el proxy.
+
+## Android 0.33.1 · corrección del resumen manual
+
+**Generar resumen** es la única acción que inicia un resumen. Se necesita texto confirmado con al menos 30 palabras y diversidad de contenido; si aún falta información, la app muestra el motivo y espera otra pulsación. Grabar, pausar o seguir hablando no dispara resúmenes.
+
+En modo online, el resumen se asigna a **Pollinations** y reserva su siguiente turno libre sin interrumpir una respuesta activa. La espera, el progreso por bloques y los errores se muestran en el apartado Resumen. Un resumen nuevo sustituye el mapa anterior cuando termina correctamente; un error conserva los apuntes anteriores. **Todo local** sigue usando exclusivamente el Qwen importado.
+
+Las preguntas completas que ya aparecen en una transcripción parcial se atienden sin esperar el cierre de todo el fragmento. Una cola de AI Horde sin trabajador asignado deja paso a otro motor después de una espera acotada; los límites externos pueden seguir retrasando las respuestas.
+
+Verificación: **83 pruebas unitarias y 22 pruebas Android correctas**, incluida una pregunta y un resumen reales con Pollinations a partir de texto ficticio. El servicio tuvo un fallo de conexión en un intento inicial; la comprobación final pasó tras los ajustes. La prueba es funcional, sin garantía de rapidez ni de precisión factual. [Informe](docs/manual-summary-fix-verification.json). APK local: `dist/v-asistente-android-0.33.1.apk`.
+
+## Android 0.33 · reparto de motores y resumen manual
+
+La app usa **AI Horde, Pollinations y Qwen local disponible** en modo Automático, con una sola operación simultánea por proveedor. Las preguntas nuevas aprovechan un motor libre y no cancelan los resúmenes. Las cuotas y los errores se gestionan por proveedor; una respuesta que ya empezó no se duplica ni se mezcla con otra.
+
+**Generar resumen** procesa el texto acumulado hasta ese momento. Puedes continuar grabando. No hay resumen periódico ni resumen automático al detener el micrófono. Las pulsaciones repetidas durante un trabajo pendiente se ignoran.
+
+Verificación de la versión: **79 pruebas unitarias y 8 instrumentadas correctas** en emulador ARM64. Las pruebas nuevas usan proveedores simulados para comprobar el reparto, los errores y la conservación de datos. La disponibilidad y la velocidad real de los servicios gratuitos no se midieron: las conexiones HTTPS externas se reiniciaron desde el entorno de prueba. [Informe](docs/balanced-routing-release-verification.json).
+
+APK de desarrollo local: `dist/v-asistente-android-0.33.apk`. Instalar encima de la versión anterior conserva el modelo importado y las conversaciones. Los APK no se incluyen en el árbol Git.
+
+## Reparto automático y resumen manual · funcionamiento
+
+**Automático** conserva AI Horde y Pollinations, con Qwen local como opción cuando hay un modelo importado. No añade proveedores que requieran cuenta ni claves personales.
+
+| Trabajo | Preferencia | Si el motor está ocupado o falla |
+| --- | --- | --- |
+| Preguntas del audio o escritas | Pollinations, después AI Horde y Qwen local disponible | Escoge un motor libre. Una cuota afecta solo a su proveedor. No repite una pregunta en varios proveedores a la vez. |
+| Resumen solicitado en modo online | Pollinations | Reserva el siguiente turno libre y muestra la espera. Una pregunta nueva no cancela el resumen. |
+| Todo local | Qwen importado | Espera al mismo motor; no envía datos a un proveedor online. |
+
+El botón **Generar resumen** toma una copia del texto acumulado hasta ese momento. Puedes continuar grabando; el texto que llega después se incluirá cuando vuelvas a solicitar el resumen. No se generan resúmenes al pausar el micrófono ni por temporizador. Las pulsaciones repetidas mientras hay una solicitud pendiente se ignoran, y, durante la sesión, no se repite el resumen si el texto no ha cambiado. Las transcripciones largas se dividen en bloques dentro de esa única solicitud del usuario, respetando el intervalo del proveedor.
+
+Cada proveedor tiene una sola operación activa y su propio tiempo de espera tras cuotas o errores. Si una respuesta ya produjo texto y falla, se conserva como incompleta: no se mezcla con una segunda respuesta. Solo se cambia de proveedor automáticamente antes de que empiece a llegar texto. Las colas de la app son acotadas; los límites y las esperas externas de servicios comunitarios no desaparecen. El modo automático puede enviar el contexto necesario a cualquiera de los proveedores online indicados.
+
+Comprobación: **79 pruebas unitarias correctas** y compilación de código principal y fuentes de pruebas Android. Las pruebas nuevas de integración cubren resumen manual, preguntas mientras otro motor resume y aislamiento de cuotas; están preparadas con transportes sintéticos, pero aún no ejecutadas en Android para evitar generar un APK sin autorización. [Informe](docs/balanced-routing-development-verification.json).
+
+## Cambios en desarrollo · sin nuevo APK
+
+Por solicitud del usuario, estos cambios se validan como código y pruebas unitarias. No se empaqueta ni instala una nueva versión hasta que lo solicite.
+
+- El resumen local rechaza instrucciones copiadas, marcadores y títulos incompletos antes de reemplazar apuntes. La vista oculta contenido antiguo contaminado y ya no inventa nodos con las primeras palabras del audio.
+- **Preguntas online**: AI Horde anónimo para preguntas, con selección del Qwen 3.5 activo de menor espera estimada según cola, rendimiento y trabajadores publicados. Si no hay un modelo compatible, se indica el problema sin cambiar a otro modelo. La disponibilidad y el tiempo real dependen de los trabajadores comunitarios.
+- **Todo local**: preguntas y resumen con el Qwen importado. No se sustituye ni descarga automáticamente un Qwen 3.5 local; se conserva el modelo compatible ya importado.
+- El resumen y el mapa se organizan en el dispositivo incluso al elegir preguntas online. Las preguntas enviadas a Horde incluyen el fragmento de contexto necesario; no se envían audio, biblioteca ni otros chats.
+- Los ajustes principales muestran el modo del asistente y la importación del modelo. Los idiomas, motores de voz y herramientas se conservan en **Más ajustes**.
+
+AI Horde usa su [API asíncrona oficial](https://aihorde.net/api/): una sola solicitud por pregunta, respuesta corta, consulta del estado con pausa, cancelación y límite de espera de 90 segundos. No se promete respuesta progresiva por tokens ni una velocidad garantizada. El acceso anónimo utiliza el identificador público documentado, sin pedir una clave personal ni una cuenta.
+
+Verificación: 73 pruebas unitarias correctas, código principal y fuentes de pruebas Android compiladas. Las pruebas Android nuevas con transporte HTTP simulado están preparadas, pero no se ejecutaron porque requerirían empaquetar un APK de pruebas. La conexión directa al catálogo real de AI Horde se reinició desde este entorno: disponibilidad de Qwen 3.5 y respuestas reales aún sin confirmar. No se hicieron solicitudes con conversaciones personales. [Informe](docs/horde-summary-development-verification.json).
+
+## Interfaz actual · 0.31
 
 Texto, Preguntas y Resumen permanecen arriba. Texto muestra la transcripción y copia directa; Preguntas conserva respuestas desplegables. Resumen usa el espacio central como un lienzo con síntesis, apuntes y acceso a sus fuentes. Las carpetas desplegables agrupan las conversaciones elegidas por el usuario.
 
@@ -12,26 +86,34 @@ Captura con contenido ficticio:
 
 ![Resumen de una clase ficticia](docs/assets/v-clean-summary-canvas-synthetic.png)
 
-## Android 0.30: mapas ampliados por IA y GPT con Puter
+## Android 0.31: Qwen3 en el chat principal
+
+En **Ajustes → Asistente** puedes elegir **Pollinations** o **Qwen3 local**. El motor seleccionado se usa en las preguntas escritas, las preguntas detectadas en el audio, la organización de apuntes, los resúmenes y la ampliación del mapa. Las conversaciones y sus fuentes permanecen en el historial al cambiar de motor.
+
+| Opción | Ejecución | Configuración |
+| --- | --- | --- |
+| Qwen3 local | En el teléfono mediante LiteRT-LM, sin consultas a servicios de IA. No necesita cuenta ni clave. | Selecciona Qwen3 local e importa un Qwen3 compatible en formato `.litertlm`. Si ya lo importaste en el laboratorio, el chat reutiliza ese archivo. |
+| Pollinations Classic | Servicio online con acceso anónimo y límites de uso. | Se conserva como opción independiente, sin cargar Qwen3. |
+
+La importación está disponible en los ajustes principales. Al terminar correctamente, selecciona Qwen3 para el chat. El modelo se carga en la primera consulta y se reutiliza entre consultas. El motor local procesa un bloque a la vez con un contexto de 2.048 tokens y bloques de transcripción más pequeños; no usa la espera de 30 segundos del transporte online. Los apuntes previos se conservan y el resumen continúa por bloques, con un contexto previo acotado. El mapa local organiza hasta ocho apartados ya generados por Qwen3, sin otra inferencia ni ampliaciones externas. Primero deben existir al menos dos apartados en el resumen.
+
+No hay cambio automático a Internet si Qwen3 falla o no está importado. Los errores de formato o de generación conservan el resumen y el mapa anteriores. Las preguntas mantienen la validación de coherencia y evidencia literal. La rapidez y la calidad dependen de los pesos y del dispositivo: un modelo pequeño no garantiza la calidad de un servicio mayor ni un análisis exhaustivo de una clase larga en una sola consulta.
+
+Validación de 0.31: **69 pruebas unitarias y 30 instrumentadas correctas** en emulador ARM64. La prueba con el Qwen3 ya importado generó una respuesta sobre eclipses, un resumen y un mapa a partir de sus apuntes, con **cero llamadas al proveedor online**. Es una comprobación funcional con contenido sintético, no una medición de precisión ni una prueba en un A54 físico. [Informe](docs/qwen-main-chat-verification.json). APK local: `dist/v-asistente-android-0.31.apk`.
+
+## Android 0.30.1: mapas ampliados por IA
 
 **Resumen → Ampliar y organizar mapa** genera un material de estudio con tema central, entre cinco y diez ramas solicitadas, subtítulos y explicaciones breves. Cada rama muestra sus conceptos directamente en el lienzo; puedes moverlo, ampliar la vista y abrir los detalles. El mapa se conserva dentro de su conversación y se incluye completo al copiar o guardar.
 
-La ampliación usa el proveedor de IA seleccionado. **La app no consulta Wikipedia ni recupera artículos.** Reutiliza el análisis anterior del chat y realiza una solicitud agrupada para elaborar el mapa; no consulta cada frase ni cada concepto por separado. El análisis periódico de preguntas y apuntes sigue siendo una etapa independiente. Las explicaciones nuevas se identifican como **IA**; los puntos atribuidos a la grabación requieren evidencia literal y conservan el enlace a su texto original. La IA puede equivocarse y esta ampliación no equivale a verificación externa de los hechos.
+La ampliación usa Pollinations Classic. **La app no consulta Wikipedia ni recupera artículos.** Reutiliza el análisis anterior del chat y realiza una solicitud agrupada para elaborar el mapa; no consulta cada frase ni cada concepto por separado. El análisis periódico de preguntas y apuntes sigue siendo una etapa independiente. Las explicaciones nuevas se identifican como **IA**; los puntos atribuidos a la grabación requieren evidencia literal y conservan el enlace a su texto original. La IA puede equivocarse y esta ampliación no equivale a verificación externa de los hechos.
 
-| Proveedor | Uso en V | Conexión y límites |
-| --- | --- | --- |
-| Pollinations Classic | Opción inicial; preguntas, organización y mapas mediante el transporte ya existente. | Sin registro ni clave; conserva una solicitud a la vez y la espera entre solicitudes del servicio gratuito. |
-| Puter · GPT-5.6 Luna | Opción elegida explícitamente en Ajustes; usa las mismas instrucciones y el contexto del chat. | **Ajustes → Respuestas online → GPT · Puter → Conectar Puter**. No pide una clave de API. Requiere conectar una sesión de Puter; el SDK admite acceso temporal cuando esté disponible. |
+Puter se retiró de la app: ya no hay selector de proveedor, conexión, SDK, WebView ni servidor HTTP local. Se elimina la preferencia antigua al abrir la app, por lo que las instalaciones que habían elegido Puter vuelven al transporte existente de Pollinations Classic. La actualización conserva las conversaciones y los mapas guardados.
 
-Puter ofrece una asignación gratuita con límites, y [el consumo corresponde a la cuenta del usuario](https://docs.puter.com/user-pays-model/). No se promete acceso ilimitado. V no compra saldo ni amplía planes automáticamente. Los límites o errores conservan los apuntes anteriores y no cambian de proveedor automáticamente. La disponibilidad del modelo se comprueba con el catálogo de la sesión; no se sustituye por otro modelo silenciosamente.
+La app envía a Pollinations las preguntas y los fragmentos necesarios, sin audio ni la biblioteca de textos guardados. Procesa una solicitud a la vez con una espera de 30 segundos entre consultas; el servicio aplica además sus propios límites. No se incluyen herramientas de búsqueda web. Las solicitudes externas usan HTTPS.
 
-La interfaz principal permanece nativa en Kotlin y Compose. Solo la conexión y las llamadas del SDK de Puter utilizan un WebView aislado con un origen local en el teléfono, según los [orígenes admitidos por Puter](https://docs.puter.com/supported-platforms/). No requiere un servidor en el Mac ni publicar una web. El SDK gestiona su sesión en el almacenamiento privado del WebView: el token no se copia a la base de conversaciones. El componente no dispone de acceso a archivos, cámara o micrófono. Las solicitudes HTTPS siguen activas para los servicios externos; HTTP se permite únicamente para el origen local.
+Verificación de 0.30.1: compilación correcta, **68 pruebas unitarias y 21 instrumentadas correctas**. Se comprobó la retirada de la selección antigua, las preguntas, los resúmenes y la conservación del mapa ante errores con respuestas sintéticas de prueba. No se realizaron consultas reales a servicios de IA ni pruebas en un teléfono físico. [Informe de retirada](docs/puter-removal-verification.json). APK local: `dist/v-asistente-android-0.30.1.apk`.
 
-La app envía las preguntas y los fragmentos necesarios al proveedor elegido, sin enviar audio ni la biblioteca de textos guardados. La conexión a Puter se inicia con una acción del usuario. No se incluyen herramientas de búsqueda web en sus llamadas de IA.
-
-Compilación e instalación en emulador correctas: **68 pruebas unitarias y 25 instrumentadas correctas**. Las respuestas de IA se comprobaron con un transporte de prueba. Además, se verificó la carga real del SDK oficial de Puter sin iniciar sesión, crear cuentas ni consumir créditos. La generación real con GPT queda pendiente de conectar la sesión del usuario; esto no es una medición de precisión del modelo ni una prueba en teléfono físico.
-
-[Ejemplo visual del mapa con contenido de prueba](docs/assets/v-model-eclipse-map-synthetic.png) · [Verificación](docs/model-map-verification.json).
+[Ejemplo visual del mapa con contenido de prueba](docs/assets/v-model-eclipse-map-synthetic.png) · [Verificación histórica de 0.30](docs/model-map-verification.json).
 
 ## Android 0.28: resumen con contexto y estructura
 
@@ -272,7 +354,7 @@ Verificación de 0.22: 38 pruebas unitarias y diez instrumentadas pasaron. Se co
 
 ## Android 0.21: respuestas online sin cuenta ni clave
 
-Las preguntas y los resúmenes de la app principal usan GPT-OSS 20B a través del acceso anónimo de Pollinations Classic (`openai-fast`). No se necesita registro, clave ni importar un modelo de respuestas. El proveedor puede cambiar el modelo asociado al alias. El laboratorio conserva sus motores locales para pruebas; la conversación principal ya no carga Qwen. La transcripción mantiene el motor elegido por el usuario.
+Las preguntas y los resúmenes de la app principal usan GPT-OSS 20B a través del acceso anónimo de Pollinations Classic (`openai-fast`). No se necesita registro, clave ni importar un modelo de respuestas. El proveedor puede cambiar el modelo asociado al alias. Qwen3 vuelve a estar disponible en la conversación principal al seleccionarlo en Ajustes; el laboratorio conserva sus pruebas independientes. La transcripción mantiene el motor elegido por el usuario.
 
 En Ajustes, «Usar respuestas online» permite activar o desactivar las solicitudes; está activado por defecto en esta versión. La app ahora solicita el permiso de Internet. Las solicitudes HTTPS usan POST: envían la pregunta escrita o detectada y contexto limitado de la transcripción. Para preguntas se usan hasta 900 caracteres de contexto; para el resumen, los últimos ocho fragmentos, limitados a 1.200 caracteres. No se envían audio ni listas de textos de la biblioteca. Las consultas de recuerdos/tareas guardados siguen resolviéndose en el dispositivo. Las respuestas y el resumen recibidos se conservan en el historial privado. Consultar la [privacidad de Pollinations](https://enter.pollinations.ai/privacy) antes de utilizar contenido sensible.
 
@@ -438,8 +520,8 @@ Las etiquetas de voz son manuales. No incluye huellas de voz, diarización autom
 - Android 12/API 31 o posterior, ARM64. Las mediciones disponibles del A54 no garantizan el mismo rendimiento en otros dispositivos.
 - Moonshine Voice Android 0.1.5: Small Streaming español, arquitectura 4. Los mismos archivos del modelo de escritorio, sin reinstanciarlo por frase y sin reinicios arbitrarios cada 12 segundos.
 - Respuestas y resúmenes de la app principal: GPT-OSS 20B mediante Pollinations Classic, acceso anónimo sin registro ni clave. HTTPS con resultados progresivos y límites del proveedor.
-- Laboratorio opcional: LiteRT-LM Android 0.18.0, CPU y Qwen3 0.6B mixed INT4. Se conserva para reproducir los ensayos locales anteriores; no se carga para responder en el chat.
-- La plantilla local del laboratorio sigue adaptada a Qwen3. Las respuestas online usan instrucciones para estudiantes, contexto seleccionado de esta conversación y hasta tres explicaciones previas; no reciben los textos de la biblioteca.
+- Motor local opcional: LiteRT-LM Android 0.18.0 y Qwen3 compatible en formato `.litertlm`; Qwen3 0.6B mixed INT4 se usó en los ensayos. Está disponible en el chat y en el laboratorio.
+- La plantilla local está adaptada a Qwen3. Las respuestas online usan instrucciones para estudiantes, contexto seleccionado de esta conversación y hasta tres explicaciones previas; no reciben los textos de la biblioteca.
 - Los motores de voz importados utilizan el selector de archivos; Android local puede gestionar idiomas mediante el servicio del sistema. El APK incluye permiso de Internet para responder y resumir. No incorpora pesos grandes ni cambia de proveedor si falla Pollinations.
 
 ## Instalar y preparar
@@ -449,7 +531,7 @@ Las etiquetas de voz son manuales. No incluye huellas de voz, diarización autom
 3. Elige el motor de voz en Ajustes. Android local requiere Android 13 o posterior, un servicio compatible y el idioma instalado; se solicita español automáticamente si falta y el servicio lo permite. Para Moonshine o Soniqo importa su paquete correspondiente.
 4. Mantén Internet conectado y «Usar respuestas online» activado. No hace falta importar un LLM ni crear cuenta o clave de Pollinations. Se envían la pregunta, contexto seleccionado de la clase y hasta tres intercambios anteriores; no se envían audio, la biblioteca ni otros chats.
 5. Pulsa el micrófono para escuchar o escribe en el mismo chat. Revisa Resumen → Tareas/Examen para las indicaciones extraídas. Desactivar respuestas online evita estas solicitudes; las notas extraídas de la transcripción guardada siguen disponibles.
-6. Solo para reproducir el laboratorio local anterior, importa un `.litertlm` compatible desde el laboratorio. Las mediciones históricas de Qwen no describen el rendimiento del servicio online.
+6. Para usar Qwen3 en el chat, selecciona Qwen3 local e importa un `.litertlm` compatible desde Ajustes → Asistente; también se puede importar desde el laboratorio. Las mediciones históricas de Qwen no describen el rendimiento del servicio online.
 
 ## Resultados estadísticos y cómo interpretarlos
 

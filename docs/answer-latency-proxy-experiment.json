@@ -1,0 +1,178 @@
+{
+  "date": "2026-10-31",
+  "device": "Pixel_9_Pro ARM64 emulator",
+  "network": "Emulator HTTP CONNECT proxy loaded from current macOS HTTPS proxy; address not stored",
+  "method": "Two fixed fictional classes; three profiles, reverse order in round two, sequential requests at least 30 seconds apart; fresh HTTP client per sample",
+  "profiles": {
+    "baseline": {
+      "samples": 2,
+      "completed": 2,
+      "firstTextSeconds": [
+        7.41,
+        45.83
+      ],
+      "medianFirstTextSeconds": 26.62
+    },
+    "compact": {
+      "samples": 2,
+      "completed": 2,
+      "firstTextSeconds": [
+        22.15,
+        43.3
+      ],
+      "medianFirstTextSeconds": 32.72
+    },
+    "short": {
+      "samples": 2,
+      "completed": 2,
+      "firstTextSeconds": [
+        37.08,
+        44.24
+      ],
+      "medianFirstTextSeconds": 40.66
+    }
+  },
+  "raw": {
+    "fixture": "fictional-classes",
+    "results": [
+      {
+        "profile": "baseline",
+        "round": 1,
+        "completed": true,
+        "firstTextMs": 7412.972461,
+        "totalMs": 9353.879004,
+        "answer": "Un eclipse solar ocurre cuando la Luna se coloca entre el Sol y la Tierra, bloqueando total o parcialmente la luz solar que llega a la superficie terrestre. La Luna proyecta su sombra sobre la Tierra; si la alineación es suficientemente precisa, la región de sombra (umbra) recorre la superficie, produciendo el eclipse. La coincidencia de los tres cuerpos y la posición de la Luna en su órbita hacen que este fenómeno sea relativamente raro.",
+        "containsExpectedTerms": true
+      },
+      {
+        "profile": "compact",
+        "round": 1,
+        "completed": true,
+        "firstTextMs": 22147.825677,
+        "totalMs": 24693.38722,
+        "answer": "Un eclipse solar ocurre cuando la Luna se coloca entre el Sol y la Tierra, bloqueando parcial o totalmente la luz solar. Esto sucede cuando la Luna está en su fase nueva y su órbita la lleva alineada con el Sol y la Tierra. La sombra de la Luna, la umbra, cae sobre la superficie terrestre, creando la oscuridad característica del eclipse.",
+        "containsExpectedTerms": true
+      },
+      {
+        "profile": "short",
+        "round": 1,
+        "completed": true,
+        "firstTextMs": 37078.171102,
+        "totalMs": 37892.15656,
+        "answer": "Un eclipse solar ocurre cuando la Luna se interpone entre el Sol y la Tierra, proyectando su sombra sobre la Tierra. La alineación exacta de los tres cuerpos permite que la luz solar sea bloqueada parcial o totalmente.",
+        "containsExpectedTerms": true
+      },
+      {
+        "profile": "short",
+        "round": 2,
+        "completed": true,
+        "firstTextMs": 44236.160354,
+        "totalMs": 46217.933063,
+        "answer": "Las métricas cuantitativas miden valores numéricos (ej.: tiempo de respuesta en segundos). Las cualitativas describen atributos no numéricos (ej.: percepción de facilidad de uso). La diferencia radica en que una se expresa con números, la otra con cualidades descriptivas.",
+        "containsExpectedTerms": true
+      },
+      {
+        "profile": "compact",
+        "round": 2,
+        "completed": true,
+        "firstTextMs": 43298.918187,
+        "totalMs": 44445.944354,
+        "answer": "Las métricas cuantitativas miden con números concretos (ej.: tiempo de respuesta en segundos, número de errores).  \nLas métricas cualitativas describen cualidades o percepciones (ej.: facilidad de uso percibida, satisfacción del usuario).  \nEn resumen, cuantitativas son valores medibles y comparables, mientras que cualitativas son evaluaciones descriptivas.",
+        "containsExpectedTerms": true
+      },
+      {
+        "profile": "baseline",
+        "round": 2,
+        "completed": true,
+        "firstTextMs": 45825.303688,
+        "totalMs": 46973.703022,
+        "answer": "Las métricas cuantitativas son valores numéricos que se pueden medir y comparar, como el tiempo de respuesta en segundos o el número de errores.  \nLas métricas cualitativas describen características o percepciones que no se expresan en números, como la facilidad de uso percibida o la satisfacción del usuario.  \nEn la clase se enfatiza que las cuantitativas permiten análisis estadísticos y comparaciones objetivas, mientras que las cualitativas ofrecen contexto y comprensión de la experiencia del usuario.",
+        "containsExpectedTerms": true
+      },
+      {
+        "profile": "horde-availability",
+        "completed": false,
+        "error": "AI Horde no pudo completar la consulta (HTTP 403).",
+        "totalMs": 2208.654084,
+        "answer": ""
+      }
+    ]
+  },
+  "reasoning_probe": {
+    "results": [
+      {
+        "effort": "none",
+        "completed": false,
+        "error": "Pollinations no pudo responder (HTTP 400). Vuelve a intentar más tarde.",
+        "headersMs": 8675.405504,
+        "firstTextMs": null,
+        "totalMs": 8676.855754,
+        "cache": "",
+        "answer": ""
+      },
+      {
+        "effort": "low",
+        "completed": true,
+        "headersMs": 13809.89384,
+        "firstTextMs": 14139.81109,
+        "totalMs": 14141.210715,
+        "cache": "MISS",
+        "answer": "42"
+      }
+    ]
+  },
+  "decisions": [
+    "Keep current low-reasoning answer profile: shorter prompts and token caps showed no consistent advantage",
+    "Prefer Pollinations in automatic mode when available, retaining summary reservation and per-provider concurrency limits",
+    "Keep Horde as fallback; avoid repeated denied-access calls for five minutes",
+    "Launch emulator with current OS proxy via tools/run_emulator.py; do not hardcode development proxy in app",
+    "Prepare HTTPS with one public metadata GET while listening starts; reuse the same HTTP client, with a three-minute preparation cooldown and no model request"
+  ],
+  "limits": [
+    "Two samples per profile do not establish a general speed improvement",
+    "Different questions and changing service load affect comparisons",
+    "Keyword checks are only a basic check; not a scientific accuracy score",
+    "Horde returned HTTP 403; Pollinations anonymous catalog offered only openai-fast",
+    "No guaranteed real-time latency or phone benchmark from this experiment",
+    "Cold and warm phase probes used a one-token arithmetic answer, not the full class fixtures. Warm-up cost is measured separately; it is not eliminated."
+  ],
+  "connection_phase_probe": {
+    "results": [
+      {
+        "effort": "low",
+        "completed": true,
+        "connectedMs": 13634.974174,
+        "requestSentMs": 13643.987549,
+        "headersMs": 18848.245218,
+        "firstTextMs": 19308.794718,
+        "totalMs": 19309.926176,
+        "cache": "MISS",
+        "answer": "42"
+      }
+    ]
+  },
+  "validation": {
+    "unitTests": 83,
+    "unitFailures": 0,
+    "instrumentedRegressionTests": 20,
+    "liveWarmConnectionProbe": 1,
+    "finalRunFailures": 0,
+    "finalRunSeconds": 29.983
+  },
+  "warm_connection_probe": {
+    "results": [
+      {
+        "effort": "low",
+        "warmupMs": 18612.826342,
+        "completed": true,
+        "connectedMs": 14.014625,
+        "requestSentMs": 14.869916,
+        "headersMs": 2881.923959,
+        "firstTextMs": 3365.678376,
+        "totalMs": 3365.974959,
+        "cache": "MISS",
+        "answer": "42"
+      }
+    ]
+  }
+}

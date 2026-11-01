@@ -113,6 +113,7 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
     var naming by remember{mutableStateOf(false)}
     var namingId by remember{mutableStateOf<Long?>(null)}
     var deletingId by remember{mutableStateOf<Long?>(null)}
+    var advancedSettings by rememberSaveable{mutableStateOf(false)}
     var choosingLanguage by remember{mutableStateOf(false)}
     var nameDraft by remember{mutableStateOf("")}
     var moving by remember{mutableStateOf<FolderMove?>(null)}
@@ -122,7 +123,7 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
     var importingText by remember{mutableStateOf(false)}
     var transcriptDraft by remember{mutableStateOf("")}
     if(importingText)AlertDialog(onDismissRequest={importingText=false},title={Text("Añadir transcripción")},text={Column{
-        Text("El texto se conserva en este chat. Con respuestas online activadas, se analizará por bloques para organizarlo y responder preguntas.",style=MaterialTheme.typography.bodySmall)
+        Text("El texto se conserva en este chat. Con el asistente activado, se analizará por bloques con el motor seleccionado para organizarlo y responder preguntas.",style=MaterialTheme.typography.bodySmall)
         OutlinedTextField(transcriptDraft,{transcriptDraft=it.take(60000)},label={Text("Pega aquí tus apuntes o transcripción")},modifier=Modifier.fillMaxWidth().heightIn(min=160.dp,max=320.dp))
     }},confirmButton={TextButton(onClick={vm.importTranscript(transcriptDraft);transcriptDraft="";importingText=false;tab=0;scope.launch{drawer.close()}},enabled=transcriptDraft.isNotBlank()){Text("Añadir al chat")}},dismissButton={TextButton(onClick={importingText=false}){Text("Cancelar")}})
     moving?.let{target->FolderPicker(s.folders,if(target.conversation==null)s.folderId else s.history.firstOrNull{it.id==target.conversation}?.folderId,{folder->vm.moveConversation(target.conversation,folder);moving=null},{folderEdit=null;folderName=""},{moving=null})}
@@ -204,29 +205,23 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
                         Text("Ajustes",style=MaterialTheme.typography.headlineSmall,fontWeight=androidx.compose.ui.text.font.FontWeight.SemiBold)
                         DesignPanel("Escucha en segundo plano"){
                             Toggle("Continuar al salir de la app",s.backgroundListening,vm::setBackgroundListening)
-                            Text("Inicia el micrófono aquí y continúa usando otras apps. La notificación permite volver al chat o detener la escucha.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("La escucha continúa al usar otras apps. Puedes detenerla desde la notificación.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                             Toggle("Botón flotante",s.floatingControl,floatingControl)
-                            Text("Arrastra la burbuja a cualquier borde. Los mensajes duran cuatro segundos: tócalos para abrir la respuesta o deslízalos para ocultarlos. Android pedirá permiso para mostrar sobre otras apps.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Mueve la burbuja al borde y desliza sus mensajes para ocultarlos.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        DesignPanel("Respuestas online"){
-                            Toggle("Usar respuestas online",s.onlineAnswers,vm::setOnlineAnswers)
+                        DesignPanel("Asistente"){
+                            Toggle("Activar asistente",s.onlineAnswers,vm::setOnlineAnswers)
                             Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
-                                FilterChip(selected=s.onlineProvider=="pollinations",onClick={vm.setOnlineProvider("pollinations")},label={Text("Pollinations")})
-                                FilterChip(selected=s.onlineProvider=="puter",onClick={vm.setOnlineProvider("puter")},label={Text("GPT · Puter")})
+                                FilterChip(selected=s.answerEngine in setOf("auto","horde"),onClick={vm.setAnswerEngine("auto")},label={Text("Automático")})
+                                FilterChip(selected=s.answerEngine=="qwen3",onClick={vm.setAnswerEngine("qwen3")},label={Text("Todo local")})
                             }
-                            if(s.onlineProvider=="puter"){
-                                Text("GPT-5.6 Luna",style=MaterialTheme.typography.bodyMedium)
-                                Text(s.puterStatus,style=MaterialTheme.typography.bodySmall,color=VoiceGreen)
-                                Text("Sin clave de API. Conecta tu sesión de Puter; admite acceso temporal según su disponibilidad. Puter ofrece una asignación gratuita limitada y el consumo corresponde a tu cuenta. Las ampliaciones de saldo se gestionan allí.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                                TextButton(onClick={appContext.startActivity(Intent(appContext,PuterConnectionActivity::class.java))}){Text("Conectar Puter")}
-                                TextButton(onClick={appContext.startActivity(Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://docs.puter.com/user-pays-model/")))}){Text("Uso y límites de Puter ↗")}
-                            }else{
-                                Text(OnlineAssistant.NAME,style=MaterialTheme.typography.bodyMedium)
-                                Text("Sin registro ni clave. Necesita Internet. El servicio gratuito admite una solicitud a la vez, cada 30 segundos; las preguntas se analizan en grupos.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                                TextButton(onClick={appContext.startActivity(Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://enter.pollinations.ai/privacy")))}){Text("Privacidad de Pollinations ↗")}
-                            }
-                            Text("Se envían al proveedor elegido las preguntas y fragmentos de transcripción para organizarlos. El mapa puede añadir explicaciones generales de IA, identificadas como ampliaciones. No se envían audio ni textos de tu biblioteca. Si falla un proveedor, se conserva el contenido y puedes cambiarlo en estos ajustes.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(if(s.answerEngine=="qwen3")"Preguntas y resumen con tu modelo Qwen, sin Internet."else "Preguntas: un motor disponible. Resúmenes: Pollinations, solo al pulsar Generar resumen con suficiente texto confirmado.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(if(s.localModelAvailable)"Modelo local listo"else "Modelo local opcional, sin Internet",style=MaterialTheme.typography.bodySmall,color=if(s.localModelAvailable)VoiceGreen else VoiceAccent)
+                            OutlinedButton(onClick=importLanguage,enabled=!s.listening&&!s.starting&&!s.generating&&!s.preparing){Text(if(s.localModelAvailable)"Cambiar modelo local"else "Importar modelo local")}
+                            Text("Formato .litertlm compatible con Qwen. Las consultas online envían el contexto necesario a AI Horde o Pollinations; no necesitan registro.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                         }
+                        TextButton(onClick={advancedSettings=!advancedSettings}){Text(if(advancedSettings)"Ocultar más ajustes"else "Más ajustes")}
+                        if(advancedSettings){
                         DesignPanel("Idiomas · Android local"){
                             Text("Español se descarga automáticamente si está disponible. La primera descarga necesita conexión.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                             val models=s.localSpeechModels
@@ -256,28 +251,29 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
                         OutlinedButton(onClick=importSoniqo,enabled=!s.preparing&&!s.listening&&!s.starting){Text("Importar paquete Soniqo ZIP")}
                         Text("Android local es experimental: depende del servicio y del idioma instalado en tu teléfono. No es el motor privado de Transcripción instantánea. Solo usa el micrófono. Soniqo y Moonshine admiten audio directo del video.",style=MaterialTheme.typography.bodySmall)
                         Toggle("Priorizar solo transcripción",s.transcriptionOnly,vm::setTranscriptionOnly)
-                        Text("Pausa respuestas y resúmenes durante la escucha. El resumen online puede generarse al detenerla. No se carga un modelo local para responder.",style=MaterialTheme.typography.bodySmall)
+                        Text("Pausa respuestas y resúmenes durante la escucha. El resumen se puede generar al detenerla, con el motor de respuestas seleccionado.",style=MaterialTheme.typography.bodySmall)
                         }
                         DesignPanel("Durante la conversación"){
                         Toggle("Responder preguntas del audio",s.autoAnswers,vm::setAnswers)
-                        Toggle("Resumen periódico",s.autoSummary,vm::setSummary)
+                        Text("El resumen se genera solo al pulsar Generar resumen. Puedes seguir grabando mientras se prepara.",style=MaterialTheme.typography.bodySmall)
                         Toggle("Etiquetar voces",s.voiceLabels,vm::setLabels)
                         Text("Las etiquetas se asignan al editar el texto. No hay identificación biométrica ni separación automática de personas.",style=MaterialTheme.typography.bodySmall)
                         }
                         DesignPanel("Modelos en el dispositivo"){
                         Text(s.models)
                         OutlinedButton(onClick=importSpeech,enabled=!s.listening&&!s.generating&&!s.preparing){Text("Importar modelo de voz ZIP")}
-                        Text("Las respuestas online no requieren descargar un modelo al teléfono.",style=MaterialTheme.typography.bodySmall)
+                        Text("Qwen3 se importa desde la sección Asistente. Pollinations no requiere un modelo local.",style=MaterialTheme.typography.bodySmall)
                         }
                         DesignPanel("Privacidad y herramientas"){
                         TextButton(onClick={importingText=true}){Text("Añadir transcripción de texto")}
                         OutlinedButton(onClick=diagnostics,enabled=!s.preparing){Text("Abrir pruebas y métricas")}
-                        Text("Funciona sin el Mac. La transcripción usa el motor de voz elegido; las respuestas y los resúmenes usan Internet. Con segundo plano activado, la escucha continúa al salir. Detén la sesión desde la app, la burbuja o la notificación. El historial se guarda en este dispositivo. La app no guarda audio. Puedes borrar cada conversación.")
+                        Text("Funciona sin el Mac. La transcripción usa el motor de voz elegido; Qwen3 responde y resume en el teléfono; Pollinations usa Internet. Con segundo plano activado, la escucha continúa al salir. Detén la sesión desde la app, la burbuja o la notificación. El historial se guarda en este dispositivo. La app no guarda audio. Puedes borrar cada conversación.")
                         Text("Las explicaciones del modelo pueden equivocarse. No realizan búsquedas externas ni ejecutan órdenes del audio. Las tareas y recuerdos requieren pulsar Guardar.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                         }
                     }
                 }
-                if(tab==2)Text("V · Android 0.30",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                if(tab==2)Text("V · Android 0.33.1",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

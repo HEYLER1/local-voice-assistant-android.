@@ -6,9 +6,9 @@ data class QuestionSpan(val text:String,val start:Int)
 object ConversationRules {
     fun folded(text:String)=Normalizer.normalize(text.lowercase(),Normalizer.Form.NFD).replace(Regex("\\p{M}"),"")
     fun key(text:String)=folded(text).replace(Regex("[^a-z0-9 ]")," ").replace(Regex("\\s+")," ").trim()
-    private val cues=Regex("\\b(?:por\\s+que|como\\s+(?:es\\s+que|se|puede|puedo|funciona|ocurre)|que\\s+(?:causa|causan|significa|son|es)|cual\\s+(?:es|fue)|cuando\\s+(?:ocurre|sera)|que\\s+tan)\\b")
+    private val cues=Regex("\\b(?:por\\s+que|para\\s+que|como\\s+(?:es\\s+que|se|puede|puedo|funciona|ocurre|podemos)|que\\s+(?:causa|causan|significa|son|es|diferencia)|cuales?\\s+(?:es|son|fue)|cuando\\s+(?:ocurre|sera|se)|cuant[oa]s?\\b|que\\s+tan)\\b")
     private val narration=Regex("\\b(?:pero\\s+que\\s+raro|ok(?:ay)?|asi\\s+que|vamos\\s+camino|y\\s+tambien|bueno\\s+(?:ahora|vamos|la\\s+siguiente)|y\\s+(?:por\\s+que|como\\s+(?:es|se)|cual\\s+es))\\b")
-    private val predicates=Regex("\\b(?:es|son|fue|sera|recibe|reciben|sabemos|sabia|causa|causan|ocurre|ocurren|funciona|funcionan|calcula|calcular|puede|puedo|significa|tiene|tienen|cambia|cambian|explica|explicar|hace|hacen|produce|producen|sucede|suceden|se)\\b")
+    private val predicates=Regex("\\b(?:es|son|fue|sera|recibe|reciben|sabemos|sabia|causa|causan|ocurre|ocurren|funciona|funcionan|calcula|calcular|puede|puedo|significa|tiene|tienen|cambia|cambian|explica|explicar|hace|hacen|produce|producen|sucede|suceden|existe|existen|sirve|sirven|utiliza|utilizan|determina|determinan|hay|se)\\b")
     private val filler=setOf("que","por","como","cual","cuando","es","son","fue","se","el","la","los","las","un","una","de","del","en","y","a","no","esto","eso","asi","aqui","ahi","todo","algo","pero","raro","funciona","puede","puedo","calcula")
     fun questions(text:String)=spans(text).map{it.text}
     fun spans(text:String,allowContextual:Boolean=false):List<QuestionSpan>{

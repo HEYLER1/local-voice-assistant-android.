@@ -1,0 +1,18 @@
+{
+  "version": "0.32-assistant",
+  "version_code": 47,
+  "installation": "adb install -r succeeded; no uninstall or data clear",
+  "instrumented_tests": {
+    "tests": 4,
+    "failures": 0,
+    "seconds": 2.936,
+    "coverage": [
+      "anonymous Horde submission and exact model enforcement with intercepted HTTP",
+      "no alternate-model submission when Qwen3.5 is absent",
+      "prompt-leak rejection",
+      "main settings local-model import and engine selection"
+    ]
+  },
+  "live_horde_generation": "not verified; provider responses intercepted in tests",
+  "apk_packaging": "Authorized by the request to update the emulator"
+}

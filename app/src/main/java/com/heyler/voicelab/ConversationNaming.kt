@@ -8,7 +8,8 @@ internal object ConversationNaming {
     private fun terms(text:String)=ConversationRules.key(text).split(' ').filter{it.length>=3&&it !in stop}.map{if(it.length>4)it.removeSuffix("s")else it}.toSet()
     private fun clean(text:String):String?{
         // A subtitle is not part of the sidebar name. Keep a complete subject, never cut mid-phrase.
-        val name=text.substringBefore(':').trim().replace(Regex("\\s+")," ").trim(' ','.',';')
+        if(!SummaryQuality.usable(text))return null
+        val name=SummaryQuality.clean(text).substringBefore(':').trim().replace(Regex("\\s+")," ").trim(' ','.',';')
         val key=ConversationRules.key(name)
         val words=key.split(' ')
         if(name.length !in 4..60||key in generic||name.contains('·')||name.any{it in "¿?\n"}||words.size>7||words.lastOrNull() in stop||terms(name).isEmpty())return null

@@ -1,0 +1,30 @@
+{
+  "version": "0.33-assistant",
+  "version_code": 48,
+  "unit_tests": {
+    "tests": 79,
+    "failures": 0
+  },
+  "emulator_tests": {
+    "tests": 8,
+    "failures": 0,
+    "duration_seconds": 6.774,
+    "transport": "synthetic intercepted providers"
+  },
+  "verified": [
+    "questions proceed on a free provider while another summarizes",
+    "recording and pausing never trigger a summary",
+    "duplicate summary taps and unchanged text do not create extra work",
+    "provider quota is isolated and triggers an alternate provider before output",
+    "partial responses are preserved and not mixed with alternate output",
+    "anonymous Horde model selection, missing-model rejection and summary prompt-leak rejection",
+    "main settings and model import remain accessible"
+  ],
+  "live_online_generation": "Not verified; outbound HTTPS connections reset from this environment",
+  "apk": {
+    "path": "dist/v-asistente-android-0.33.apk",
+    "bytes": 120828603,
+    "sha256": "6af192fcabc9ff914f6a851fd5332d5832abe3bd920ec8c48507f0a6d23a368a"
+  },
+  "installation": "Updated emulator using install -r; no data clear or uninstall"
+}

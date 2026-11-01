@@ -20,21 +20,21 @@ Revisa cifras, unidades y relaciones antes de devolver el mapa. Si el audio est�
         append("Construye un material de estudio completo: explica los fundamentos que faltan en la grabación y distingue esas ampliaciones como origin=model. No se han consultado páginas web.\n")
     }
     fun parse(raw:String,topic:String,lines:List<SpeechLine>,sources:List<ResearchSource>):ResearchedMap{
-        val data=JSONObject(raw.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim())
+        val data=StructuredReply.objectValue(raw)
         val branches=mutableListOf<MapBranch>()
         val seen=mutableSetOf<String>()
         val array=data.optJSONArray("branches")?:error("El servicio no devolvió las ramas del mapa. Se conservó el anterior.")
         for(i in 0 until minOf(10,array.length())){
             val branch=array.optJSONObject(i)?:continue
-            val rawTitle=branch.optString("title").trim()
+            val rawTitle=StructuredReply.string(branch,"title").trim()
             val title=rawTitle.takeIf{KnowledgeSummary.heading(it.trim('¿','?')).isNotBlank()}.orEmpty();if(title.isBlank())continue
             val points=mutableListOf<MapPoint>();val entries=branch.optJSONArray("points")?:continue
             for(j in 0 until minOf(3,entries.length())){
                 val point=entries.optJSONObject(j)?:continue
-                val text=point.optString("text").trim();if(text.length !in 15..300)continue
-                val subtitle=point.optString("subtitle").trim().take(60)
-                val origin=point.optString("origin")
-                val evidence=point.optString("evidence")
+                val text=StructuredReply.string(point,"text").trim();if(text.length !in 15..300)continue
+                val subtitle=StructuredReply.string(point,"subtitle").trim().take(60)
+                val origin=StructuredReply.string(point,"origin")
+                val evidence=StructuredReply.string(point,"evidence")
                 val recording=point.optJSONArray("sources")?.let{ids->(0 until minOf(ids.length(),4)).mapNotNull{lines.getOrNull(ids.optInt(it)-1)}}.orEmpty()
                 val refs=point.optJSONArray("references")?.let{ids->(0 until minOf(ids.length(),3)).mapNotNull{idx->sources.firstOrNull{it.id==ids.optString(idx)}}}.orEmpty()
                 val valid=when(origin){
@@ -50,7 +50,7 @@ Revisa cifras, unidades y relaciones antes de devolver el mapa. Si el audio est�
         }
         require(branches.size>=2){"No se completó un mapa suficiente. Se conservó el mapa anterior."}
         val used=branches.flatMap{b->b.points.flatMap{it.references}}.toSet()
-        return ResearchedMap(KnowledgeSummary.cleanTitle(data.optString("title")).ifBlank{topic},data.optString("overview").trim().take(1200),branches,
+        return ResearchedMap(KnowledgeSummary.cleanTitle(StructuredReply.string(data,"title")).ifBlank{topic},StructuredReply.string(data,"overview").trim().take(1200),branches,
             sources.filter{it.id in used},lines.associate{it.id to it.revision},System.currentTimeMillis())
     }
 }

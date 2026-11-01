@@ -8,6 +8,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
@@ -53,6 +54,7 @@ internal data class SummaryCanvasNode(
 @Composable private fun CanvasViewport(topic:String,nodes:List<SummaryCanvasNode>,onOpen:(SummaryCanvasNode?)->Unit,modifier:Modifier,onEnlarge:(()->Unit)?=null,onClose:(()->Unit)?=null,tools:@Composable ()->Unit,preview:String){
     var zoom by rememberSaveable{mutableFloatStateOf(1f)}
     var pan by remember{mutableStateOf(Offset.Zero)}
+    var toolsHeight by remember{mutableIntStateOf(0)}
     val percent=(zoom*100).roundToInt()
     val density=LocalDensity.current
     Surface(modifier,color=VoiceBackground){
@@ -63,7 +65,7 @@ internal data class SummaryCanvasNode(
             val worldHeight=(196+rootExtra+((nodes.size+1)/2-1).coerceAtLeast(0)*96).dp
             val viewWidth=with(density){maxWidth.toPx()}
             val viewHeight=with(density){maxHeight.toPx()}
-            val baseY=with(density){48.dp.toPx()}+((viewHeight-with(density){(worldHeight+96.dp).toPx()})/2).coerceAtLeast(0f)
+            val baseY=maxOf(with(density){48.dp.toPx()},toolsHeight.toFloat()+with(density){8.dp.toPx()})+((viewHeight-with(density){(worldHeight+96.dp).toPx()})/2).coerceAtLeast(0f)
             fun bounded(value:Offset,scale:Float)=Offset(value.x.coerceIn(-viewWidth*scale,viewWidth*scale),value.y.coerceIn(-viewHeight*scale,viewHeight*scale))
             fun changeZoom(value:Float){
                 val next=value.coerceIn(.75f,2.5f)
@@ -76,7 +78,7 @@ internal data class SummaryCanvasNode(
                 var x=12.dp.toPx()
                 while(x<size.width){var y=12.dp.toPx();while(y<size.height){drawCircle(Color(0xFF66708D).copy(alpha=.10f),.5.dp.toPx(),Offset(x,y));y+=step};x+=step}
             }
-            Box(Modifier.fillMaxSize().pointerInput(viewWidth,viewHeight){
+            Box(Modifier.fillMaxSize().pointerInput(viewWidth,viewHeight,baseY){
                 detectTransformGestures{centroid,delta,scale,_->
                     val next=(zoom*scale).coerceIn(.75f,2.5f)
                     val local=centroid-Offset(0f,baseY)
@@ -112,7 +114,7 @@ internal data class SummaryCanvasNode(
                     }
                 }
             }
-            Row(Modifier.align(Alignment.TopStart).padding(start=8.dp,top=4.dp),verticalAlignment=Alignment.CenterVertically){tools()}
+            Row(Modifier.align(Alignment.TopStart).padding(start=8.dp,top=4.dp).onSizeChanged{toolsHeight=it.height},verticalAlignment=Alignment.CenterVertically){tools()}
             if(onClose!=null)IconButton(onClick=onClose,modifier=Modifier.align(Alignment.TopEnd).padding(4.dp).size(40.dp).semantics{contentDescription="Cerrar lienzo ampliado"}){VoiceGlyph("close",MaterialTheme.colorScheme.onSurfaceVariant,Modifier.size(19.dp))}
             if(onEnlarge!=null)IconButton(onClick=onEnlarge,modifier=Modifier.align(Alignment.TopEnd).padding(4.dp).size(36.dp).semantics{contentDescription="Ampliar lienzo del resumen"}){VoiceGlyph("expand",MaterialTheme.colorScheme.onSurfaceVariant,Modifier.size(20.dp))}
             CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 32.dp){

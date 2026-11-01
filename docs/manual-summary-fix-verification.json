@@ -1,0 +1,50 @@
+{
+  "version": "0.33.1-assistant",
+  "versionCode": 49,
+  "completed_checks_date": "2026-10-30",
+  "report_date": "2026-10-31",
+  "unit_tests": {
+    "tests": 83,
+    "failures": 0,
+    "errors": 0
+  },
+  "android_tests": {
+    "controlled": 21,
+    "live_pollinations": 1,
+    "failures_in_final_runs": 0,
+    "classes": {
+      "BalancedAssistantTest": 8,
+      "HordeAssistantTest": 4,
+      "SummaryDocumentTest": 3,
+      "OnlineAssistantTest": 6,
+      "OnlineLiveServiceTest": 1
+    },
+    "controlled_run_seconds": 14.118,
+    "final_transport_and_live_run_seconds": 57.344,
+    "device": "Pixel_9_Pro ARM64 emulator"
+  },
+  "verified_behaviors": [
+    "Summary starts only on explicit user request",
+    "Insufficient confirmed text shows a visible explanation",
+    "Minimum 30 confirmed words and 8 distinct content terms",
+    "Online summaries reserve Pollinations next free slot without cancelling an active answer",
+    "Repeated taps do not duplicate a pending summary",
+    "Successful summary replaces an old map; failure preserves prior notes",
+    "Complete questions in partial transcription are answered before the whole segment is finalized",
+    "Horde queue with no processing worker yields to another provider after bounded waiting",
+    "Real Pollinations question and structured summary succeeded using fixed fictional astronomy text"
+  ],
+  "limitations": [
+    "Initial live run failed with a connection/read timeout; final run passed after timeout and request tuning",
+    "A successful live test does not guarantee provider uptime, latency or factual accuracy",
+    "Tests used fictional text; no physical A54 or noisy recording benchmark in this verification",
+    "Temporary raw instrumentation logs were not retained across the workspace restart; counts are from completed tool results in the session"
+  ],
+  "apk": {
+    "file": "dist/v-asistente-android-0.33.1.apk",
+    "bytes": 120861371,
+    "sha256": "3ce9201280b57d54560291b08d0adaedac59104b572301cc86410fb8ac331a47",
+    "signature_verified": true,
+    "signing": "development"
+  }
+}

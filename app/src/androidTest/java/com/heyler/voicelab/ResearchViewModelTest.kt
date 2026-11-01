@@ -28,7 +28,7 @@ class ResearchViewModelTest {
         }.build())
         suspend fun await(check:()->Boolean){withTimeout(10000){while(!check())delay(30)}}
         try{
-            vm.temporaryConversation();vm.setOnlineProvider("pollinations");vm.setOnlineAnswers(true);vm.setAnswers(false);vm.setSummary(false);vm.setTranscriptionOnly(false)
+            vm.temporaryConversation();vm.setAnswerEngine("pollinations");vm.setOnlineAnswers(true);vm.setAnswers(false);vm.setSummary(false);vm.setTranscriptionOnly(false)
             vm.state.value=vm.state.value.copy(lines=ResearchFixtures.lines,organization=ResearchFixtures.state().organization.copy(map=null))
             val originalNotes=vm.state.value.organization.sections
             vm.researchSummary();await{vm.state.value.organization.map!=null&&!vm.state.value.generating}
@@ -41,7 +41,7 @@ class ResearchViewModelTest {
             vm.researchSummary();delay(150);assertEquals(2,modelCalls.get())
         }finally{
             vm.background();holder.clear()
-            preferences.edit().apply{for(key in listOf("online-answers","answers","summary","transcription-only")){(original[key] as? Boolean)?.let{putBoolean(key,it)}?:remove(key)};(original["online-provider"] as? String)?.let{putString("online-provider",it)}?:remove("online-provider")}.commit()
+            preferences.edit().apply{for(key in listOf("online-answers","answers","summary","transcription-only")){(original[key] as? Boolean)?.let{putBoolean(key,it)}?:remove(key)};(original["answer-engine"] as? String)?.let{putString("answer-engine",it)}?:remove("answer-engine")}.commit()
         }
     }
 }

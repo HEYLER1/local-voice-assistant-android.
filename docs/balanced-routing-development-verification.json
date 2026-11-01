@@ -1,0 +1,31 @@
+{
+  "status": "source changes only; no new APK or installation",
+  "unit_tests": {
+    "tests": 79,
+    "failures": 0
+  },
+  "compile_main_and_android_test_sources": "successful",
+  "instrumented_tests": "sources compiled; emulator execution pending user authorization to package",
+  "summary_trigger": "explicit button only; frozen snapshot and unchanged-text deduplication",
+  "providers": [
+    "AI Horde",
+    "Pollinations Classic",
+    "optional imported local Qwen"
+  ],
+  "pool": "one lease per provider, isolated cooldowns, no preemption for new questions",
+  "fallback": "before output only; no simultaneous duplicate calls",
+  "limits": {
+    "active_or_waiting_jobs": 12,
+    "question_channel": 24,
+    "question_deadline_seconds": 120,
+    "summary_deadline_seconds": 600
+  },
+  "live_service_generation": "not tested in this change",
+  "concurrency_test": "16 concurrent claimants; maximum one active call on the same provider",
+  "instrumentation_cases": [
+    "manual-only summary and tap deduplication",
+    "a question completes on Horde while Pollinations summary remains active",
+    "a Horde quota does not pause Pollinations or manual summary",
+    "partial output is not duplicated or mixed with another provider"
+  ]
+}

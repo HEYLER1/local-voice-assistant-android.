@@ -12,4 +12,7 @@ class ConversationRulesTest {
     @Test fun extractedQuotesRemainLiteral(){val text="El eclipse solar ocurre cuando la Luna pasa delante del Sol.";assertEquals(listOf(text),ConversationRules.salient(text))}
     @Test fun incompleteNoiseQuestionsAreRejected(){for(q in listOf("¿que hay un ?","¿Qué es un?","¿Por qué es la?","¿Cómo se calcula el área de un?"))assertTrue(q,ConversationRules.questions(q).isEmpty())}
     @Test fun consecutiveCompleteQuestionsSurvive(){assertEquals(2,ConversationRules.questions("¿Qué es la gravedad? ¿Cómo funciona la fotosíntesis?").size)}
+    @Test fun teachingQuestionsAboutQuantityAndPurposeAreDetected(){
+        assertEquals(3,ConversationRules.questions("¿Cuántas líneas de código tiene un sistema grande? ¿Para qué sirve documentar un sistema? ¿Qué diferencia existe entre métricas cualitativas y cuantitativas?").size)
+    }
 }

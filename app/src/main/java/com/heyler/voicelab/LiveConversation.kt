@@ -70,7 +70,7 @@ import androidx.compose.ui.unit.sp
 @Composable private fun WaitingForQuestion(enabled:Boolean){Text(if(enabled)"Sin preguntas todavía."else "Activa las respuestas del audio en Ajustes.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant,modifier=Modifier.padding(vertical=8.dp))}
 @Composable private fun AnswerPanel(a:LiveAnswer,onSpeak:(String)->Unit,onSave:(String,String)->Unit,showQuestion:Boolean=true){
     val compact=LocalConfiguration.current.screenHeightDp<480
-    val active=a.status=="En espera"||a.status.startsWith("Preparando")||a.status.startsWith("Respondiendo")
+    val active=a.status.startsWith("En espera")||a.status.startsWith("Preparando")||a.status.startsWith("Respondiendo")
     var evidenceOpen by rememberSaveable(a.id){mutableStateOf(false)}
     Column(Modifier.fillMaxWidth().padding(vertical=if(showQuestion)8.dp else 4.dp),verticalArrangement=Arrangement.spacedBy(8.dp)){
         Row(verticalAlignment=Alignment.CenterVertically){VoiceGlyph("spark",VoiceAccent,Modifier.size(18.dp));Spacer(Modifier.width(8.dp));Text(if(a.suggested)"SUGERIDA PARA REPASAR"else if(a.source==null)"TU CONSULTA"else if(showQuestion)"PREGUNTA DEL AUDIO · CONTEXTUALIZADA"else "DEL AUDIO",modifier=Modifier.weight(1f),color=VoiceAccent,style=MaterialTheme.typography.labelSmall,fontWeight=FontWeight.Bold);if(active)CircularProgressIndicator(Modifier.size(16.dp),strokeWidth=2.dp,color=VoiceAccent)}
