@@ -18,7 +18,7 @@ class QwenSettingsTest{
         try{
             rule.runOnUiThread{
                 vm.temporaryConversation();vm.setAnswerEngine("pollinations")
-                rule.activity.setContent{VoiceTheme{AssistantScreen(vm,{}, {},{imported=true},{},{},{},initialTab=2)}}
+                rule.activity.setContent{VoiceTheme{AssistantScreen(vm,{}, {},{imported=true},initialTab=2)}}
             }
             rule.onNodeWithText("Todo local").performScrollTo().performClick()
             rule.runOnIdle{assertEquals("qwen3",vm.state.value.answerEngine)}

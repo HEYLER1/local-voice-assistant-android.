@@ -21,7 +21,7 @@ class AnalysisQualityTest {
         assertFalse(AnalysisEvidence.hasQuestion("Porque ya se utilizan librerías y componentes reutilizables."))
     }
     @Test fun respectsFreeServiceCooldownHeaders(){
-        assertEquals(30000L,OnlineBudget.retryMillis("10"))
+        assertEquals(10000L,OnlineBudget.retryMillis("10"))
         assertEquals(120000L,OnlineBudget.retryMillis("120"))
         assertEquals(60000L,OnlineBudget.retryMillis("bad"))
         assertEquals(30000L,OnlineBudget.retryMillis("Thu, 01 Jan 1970 00:00:40 GMT",10000))

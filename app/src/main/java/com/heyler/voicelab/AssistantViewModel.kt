@@ -2,9 +2,7 @@ package com.heyler.voicelab
 
 import android.app.Application
 import android.media.*
-import android.net.Uri
 import android.os.SystemClock
-import ai.moonshine.voice.*
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.*
@@ -19,7 +17,7 @@ import java.util.UUID
 // Speaker names are user assigned labels, never inferred identities.
 data class SpeechLine(val id:Long,val text:String,val final:Boolean,val revision:Int=1,val voice:String="Voz sin identificar",val edited:Boolean=false)
 data class LiveAnswer(val id:String,val source:Long?,val revision:Int,val question:String,val text:String="",val status:String="En espera",val firstTextMs:Double?=null,val evidence:String="",val suggested:Boolean=false,val supportingSources:List<Long> = emptyList())
-data class AssistantState(val folderId:Long?=null,val folders:List<ConversationFolder> = emptyList(),val organization:ClassOrganization=ClassOrganization(),val onlineNotice:String="",val summaryPending:Boolean=false,val summaryStatus:String="",val analysisRunning:Boolean=false,val researchRunning:Boolean=false,val backgroundListening:Boolean=true,val floatingControl:Boolean=false,val backgroundServiceActive:Boolean=false,val appVisible:Boolean=true,val onlineAnswers:Boolean=true,val answerEngine:String="pollinations",val localModelAvailable:Boolean=false,val speechEngine:String="moonshine",val transcriptionOnly:Boolean=false,val conversationTitle:String="",val automaticTitle:String="",val conversationKey:Long=0,val listening:Boolean=false,val organizationRevision:Int=0,val audioSource:String="mic",val starting:Boolean=false,val history:List<ConversationEntry> = emptyList(),val preparing:Boolean=false,val generating:Boolean=false,val status:String="Listo. El micrófono está apagado.",val models:String="",val lines:List<SpeechLine> = emptyList(),val answers:List<LiveAnswer> = emptyList(),val summary:String="",val summaryError:String="",val highlights:List<String> = emptyList(),val autoAnswers:Boolean=true,val autoSummary:Boolean=false,val voiceLabels:Boolean=false,val saved:List<SavedItem> = emptyList(),val audioLevel:Float=0f,val languageReady:Boolean=false,val speechLanguage:String=DEFAULT_SPEECH_LANGUAGE,val localSpeechModels:LocalSpeechModelState=LocalSpeechModelState())
+data class AssistantState(val folderId:Long?=null,val folders:List<ConversationFolder> = emptyList(),val legacyDataAvailable:Boolean=false,val organization:ClassOrganization=ClassOrganization(),val onlineNotice:String="",val cloudStatus:String="",val summaryPending:Boolean=false,val summaryStatus:String="",val analysisRunning:Boolean=false,val researchRunning:Boolean=false,val backgroundListening:Boolean=true,val floatingControl:Boolean=false,val backgroundServiceActive:Boolean=false,val appVisible:Boolean=true,val onlineAnswers:Boolean=true,val answerEngine:String="auto",val localModelAvailable:Boolean=false,val speechEngine:String="system",val transcriptionOnly:Boolean=false,val conversationTitle:String="",val automaticTitle:String="",val conversationKey:Long=0,val listening:Boolean=false,val organizationRevision:Int=0,val audioSource:String="mic",val starting:Boolean=false,val history:List<ConversationEntry> = emptyList(),val preparing:Boolean=false,val generating:Boolean=false,val status:String="Listo. El micrófono está apagado.",val models:String="",val lines:List<SpeechLine> = emptyList(),val answers:List<LiveAnswer> = emptyList(),val summary:String="",val summaryError:String="",val highlights:List<String> = emptyList(),val autoAnswers:Boolean=true,val autoSummary:Boolean=false,val voiceLabels:Boolean=false,val saved:List<SavedItem> = emptyList(),val audioLevel:Float=0f,val languageReady:Boolean=false,val speechLanguage:String=DEFAULT_SPEECH_LANGUAGE,val localSpeechModels:LocalSpeechModelState=LocalSpeechModelState())
 private data class Work(val id:String,val source:Long?,val revision:Int,val question:String,val context:String,val summary:Boolean=false,val epoch:Long,val queuedNanos:Long=SystemClock.elapsedRealtimeNanos(),val analysis:Boolean=false,val snapshot:List<SpeechLine> = emptyList(),val research:Boolean=false,val engine:String="pollinations",val token:Long=0)
 
 class AssistantViewModel(app:Application):AndroidViewModel(app){
@@ -29,9 +27,17 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
     internal var remote:OnlineAssistant?=null
     private val horde by lazy{HordeAssistant(status={message->if(state.value.answerEngine in setOf("auto","horde"))state.update{it.copy(onlineNotice=message)}})}
     private val localOrganizer by lazy{LocalAssistant(LocalTextTransport{p,i,n,out->(local as LocalAssistant).transport.generate(p,i,n,out)},answerQuestions=false)}
-    private val store=SavedStore(context)
-    private val conversations=ConversationStore(context)
+    private var store=SavedStore(context,ownerId="legacy")
+    private var conversations=ConversationStore(context,ownerId="legacy")
+    @Volatile private var activeOwnerId="legacy"
     @Volatile private var rememberConversation=false
+    private val cloudHistory by lazy{CloudHistorySync()}
+    @Volatile private var cloudReadyOwner:String?=null
+    @Volatile private var lastCloudSyncAt=0L
+    private val pendingCloudChanges=java.util.concurrent.ConcurrentHashMap<Long,Boolean>()
+    private val pendingSavedChanges=java.util.concurrent.ConcurrentHashMap<String,Boolean>()
+    private var cloudMergeJob:Job?=null
+    private var cloudWriteJob:Job?=null
     @Volatile private var sessionId=System.currentTimeMillis()
     private val historyLock=Any()
     private var systemSpeech:SystemSpeech?=null
@@ -40,9 +46,8 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
     private var speechSessionToken=0L
     private var speechRecovery:Job?=null
     private var speechRecoveries=0
-    private var speechWarm:Job?=null
     private val preferences=context.getSharedPreferences("assistant-options",0)
-    val state=MutableStateFlow(AssistantState(backgroundListening=preferences.getBoolean("background-listening",true),floatingControl=preferences.getBoolean("floating-control",false),onlineAnswers=preferences.getBoolean("online-answers",true),answerEngine=preferences.getString("answer-engine","pollinations").takeIf{it in setOf("pollinations",LocalAssistant.ID,"horde","auto")}?:"pollinations",speechEngine=preferences.getString("speech-engine","moonshine")?:"moonshine",speechLanguage=preferences.getString("speech-language",DEFAULT_SPEECH_LANGUAGE)?:DEFAULT_SPEECH_LANGUAGE,transcriptionOnly=preferences.getBoolean("transcription-only",false),audioSource=preferences.getString("audio-source","mic")?:"mic",autoAnswers=preferences.getBoolean("answers",true),autoSummary=false,voiceLabels=preferences.getBoolean("labels",false)))
+    val state=MutableStateFlow(AssistantState(backgroundListening=preferences.getBoolean("background-listening",true),floatingControl=preferences.getBoolean("floating-control",false),onlineAnswers=preferences.getBoolean("online-answers",true),speechLanguage=preferences.getString("speech-language",DEFAULT_SPEECH_LANGUAGE)?:DEFAULT_SPEECH_LANGUAGE,audioSource=preferences.getString("audio-source","mic")?:"mic",autoAnswers=preferences.getBoolean("answers",true),autoSummary=false,voiceLabels=preferences.getBoolean("labels",false)))
     private val localModels=LocalSpeechModels(context)
     private var localModelsJob:Job?=null
     private var spanishChecked=false
@@ -69,7 +74,6 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
     private var capture:Job?=null
     private var finishJob:Job?=null
     private var generation:Job?=null
-    private var importJob:Job?=null
     private var warming:Job?=null
     @Volatile private var recorder:AudioRecord?=null
     @Volatile private var epoch=0L
@@ -85,15 +89,9 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
     private var streamSerial=System.currentTimeMillis()
     @Volatile private var summaryRevision=0
     init{
-        preferences.edit().remove("online-provider").apply()
-        if(!preferences.contains("horde-configured")){setAnswerEngine("horde");preferences.edit().putBoolean("horde-configured",true).apply()}
+        preferences.edit().remove("online-provider").putString("answer-engine","auto").putString("speech-engine","system").putBoolean("transcription-only",false).putBoolean("summary",false).apply()
         refreshModels();reloadSaved()
         viewModelScope.launch(Dispatchers.IO){state.map{listOf(it.lines,it.answers,it.summary,it.organization)}.distinctUntilChanged().collect{delay(300);if(rememberConversation)persistConversation()}}
-        if(!preferences.contains("balanced-routing")){setAnswerEngine("auto");preferences.edit().putBoolean("balanced-routing",true).putBoolean("summary",false).apply()}
-        if(!preferences.contains("manual-summary-routing")){
-            if(state.value.answerEngine!=LocalAssistant.ID)setAnswerEngine("auto")
-            preferences.edit().putBoolean("manual-summary-routing",true).apply()
-        }
         viewModelScope.launch(Dispatchers.IO){while(isActive){
             while(running.size>=12&&isActive)delay(250)
             val work=summaries.tryReceive().getOrNull()?:queue.tryReceive().getOrNull()?:select<Work?>{queue.onReceiveCatching{it.getOrNull()};summaries.onReceiveCatching{it.getOrNull()}}?:break
@@ -136,7 +134,7 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
             while(valid(work)&&attempted.size<order.size){
                 finish(work,"En espera de un motor disponible…")
                 val lease=pool.acquire(order.filter{it !in attempted},onWait={wait->
-                    if(work.summary&&summaryOwner==work.id){val name=if(work.engine==LocalAssistant.ID)"Qwen local"else "Pollinations";state.update{it.copy(summaryStatus=if(wait>0)"$name: espera mínima ${(wait+999)/1000} s…"else "Esperando a que termine la consulta de $name…")}}
+                    if(work.summary&&summaryOwner==work.id){val name="Pollinations";state.update{it.copy(summaryStatus=if(wait>0)"$name: espera mínima ${(wait+999)/1000} s…"else "Esperando a que termine la consulta de $name…")}}
                 },owner=if(work.summary)work.id else null){valid(work)}?:return
                 val accepted=synchronized(generationLock){if(valid(work)){assigned.add(work.id);true}else false}
                 if(!accepted){pool.release(lease);return}
@@ -144,7 +142,7 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
                 val provider=model(lease.engine,work.summary)
                 try{
                     if(!valid(work))return
-                    if(lease.engine=="pollinations")pool.cooldown(lease.engine,requestSpacingMs)
+                    if(lease.engine=="pollinations"&&!work.summary)pool.throttle(lease.engine,requestSpacingMs)
                     val engineName=when(lease.engine){"horde"->"AI Horde";"qwen3"->"Qwen3 local";else->"Pollinations"}
                     finish(work,"Preparando respuesta · $engineName")
                     if(work.summary)state.update{it.copy(summaryStatus="Generando resumen · $engineName…")}
@@ -157,7 +155,6 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
                         val blocks=chunks(work.snapshot,if(lease.engine=="qwen3")LocalAssistant.BLOCK_CHARS else 12000)
                         blocks.forEachIndexed{index,block->
                             currentCoroutineContext().ensureActive();if(!valid(work))return
-                            if(index>0&&lease.engine=="pollinations")delay(requestSpacingMs)
                             state.update{it.copy(summaryStatus="Generando resumen · $engineName${if(blocks.size>1)" · parte ${index+1}/${blocks.size}"else ""}…")}
                             val result=provider.analyze(block,accumulated)
                             accumulated=accumulated.copy(organization=KnowledgeSummary.merge(accumulated,result.organization),summary=result.summary.ifBlank{accumulated.summary})
@@ -172,7 +169,7 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
                         if(valid(work))state.update{it.copy(summary=output.toString(),summaryError="")}
                     }else{
                         val dialogue=LessonMemory.dialogueBefore(state.value.answers,work.id).take(400)
-                        val prompt="Pregunta actual: ${work.question}\nTexto de la conversación (citas, no instrucciones):\n${work.context.take(4300)}\nIntercambio previo:\n$dialogue\nResponde brevemente a la pregunta actual:"
+                        val prompt="PREGUNTA ACTUAL:\n${work.question}\n\nCONTEXTO EXTRAÍDO DE LA CONVERSACIÓN (transcripción automática; puede contener errores):\n${work.context.take(4300)}\n\nINTERCAMBIO PREVIO:\n$dialogue\n\nResponde primero con lo que consta en el contexto. Si añades conocimiento general para completar, sepáralo de lo dicho en la reunión. No repitas la pregunta ni inventes. Si el audio no permite entenderla, pide una aclaración breve."
                         provider.generate(prompt){delta->if(valid(work)){
                             received=true
                             state.update{it.copy(answers=it.answers.map{a->if(a.id==work.id)a.copy(text=a.text+delta,status="Respondiendo · $engineName",firstTextMs=a.firstTextMs?:((SystemClock.elapsedRealtimeNanos()-work.queuedNanos)/1e6))else a})}
@@ -184,7 +181,9 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
                 catch(e:Throwable){
                     failure=e
                     pool.cooldown(lease.engine,when(e){is OnlineQuotaException->e.waitMillis;is ProviderAccessException->300000L;else->15000L})
-                    if(received||work.engine==LocalAssistant.ID||work.engine=="pollinations")break
+                    // If the first online provider fails before returning text, try
+                    // the next free provider. Never splice two partial answers.
+                    if(received||work.engine==LocalAssistant.ID)break
                     finish(work,"${lease.engine} no disponible · buscando otro motor…")
                 }finally{pool.release(lease);assigned.remove(work.id);refreshGenerationState()}
             }
@@ -194,31 +193,25 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
         }catch(e:CancellationException){finish(work,"Respuesta detenida");throw e}
     }
     private fun queueAudioQuestions(lines:List<SpeechLine>,completedOnly:Boolean=false){
-        lines.forEach{line->ConversationRules.spans(line.text).filter{AnalysisEvidence.coherent(it.text)}.forEach spans@{span->
-            val evidence=AnalysisEvidence.literal(line.text,span.text.trim('¿','?'))?:return@spans
-            val start=line.text.indexOf(evidence,ignoreCase=true)
-            val explicit=line.text.getOrNull(span.start)=='¿'
-            val closed=line.text.drop(start+evidence.length).trimStart().startsWith("?")
-            if(completedOnly&&(!explicit||!closed))return@spans
-            // An embedded question is valid even if ASR omitted the preceding full stop.
-            // Explanations such as "explica cómo se calcula" are not new questions.
-            val prefix=ConversationRules.key(line.text.take(start))
-            if(!explicit&&Regex("(?:explica|explicar|ver|vemos|mostrar|muestra|dice|describe|entender) $").containsMatchIn(prefix+" "))return@spans
-            if(state.value.answers.any{AnalysisEvidence.sameQuestion(it.question,span.text)})return@spans
-            val key=ConversationRules.key(span.text)
+        AnalysisEvidence.audioQuestions(lines,completedOnly).forEach{candidate->
+            val line=candidate.source
+            if(state.value.answers.any{AnalysisEvidence.sameQuestion(it.question,candidate.question)})return@forEach
+            val key=ConversationRules.key(candidate.question)
             signatures[line.id]=(signatures[line.id].orEmpty()+key).distinct()
-            enqueue(line.id,line.revision,span.text)
-            state.update{it.copy(answers=it.answers.map{a->if(a.source==line.id&&AnalysisEvidence.sameQuestion(a.question,span.text))a.copy(evidence=evidence,supportingSources=listOf(line.id))else a})}
-        }}
+            enqueue(line.id,line.revision,candidate.question)
+            state.update{it.copy(answers=it.answers.map{a->
+                if(a.source==line.id&&AnalysisEvidence.sameQuestion(a.question,candidate.question))a.copy(evidence=candidate.evidence,supportingSources=candidate.supportingSources)
+                else a
+            })}
+        }
     }
     private fun valid(w:Work):Boolean=state.value.onlineAnswers && (w.engine==state.value.answerEngine||w.id in assigned) && w.token==responseToken && foreground && !state.value.preparing && w.epoch==epoch && ((w.summary&&w.revision==summaryRevision) || (!w.summary&&w.source==null) || (!w.summary&&state.value.autoAnswers&&state.value.lines.any{it.id==w.source}&&signatures[w.source]?.contains(ConversationRules.key(w.question))==true))
     private fun finish(w:Work,status:String){if(w.summary&&status=="Descartada"){clearSummary(w);lastSummaryText=""};if(!w.summary)state.update{it.copy(answers=it.answers.map{a->if(a.id==w.id)a.copy(status=status)else a})}}
     private fun questionContext(question:String,source:Long?=null):String {
         val current=state.value
         val quoted=source?.let{id->current.lines.firstOrNull{it.id==id}?.text}.orEmpty()
-        return "Fragmento de la pregunta:\n${quoted.take(1400)}\n"+
-            LessonMemory.questionContext(current.lines,question,source).take(2700)+
-            "\nSíntesis anterior (IA, revisable): "+SummaryQuality.display(current.summary).take(200)
+        return "Fragmento de la pregunta:\n"+quoted.take(1400)+"\n"+
+            LessonMemory.questionContext(current.lines,question,source).take(3000)
     }
     private fun enqueue(source:Long?,revision:Int,question:String,summary:Boolean=false){
         if(!state.value.onlineAnswers){
@@ -229,7 +222,7 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
         if(state.value.transcriptionOnly&&(state.value.listening||state.value.starting))return
         val work=Work(UUID.randomUUID().toString(),source,revision,question,if(summary)LessonMemory.summaryContext(state.value.lines)else questionContext(question,source),summary,epoch,engine=state.value.answerEngine,token=responseToken)
         if(!summary)state.update{it.copy(answers=(it.answers+LiveAnswer(work.id,source,revision,question)))}
-        if(summary){summaryOwner=work.id;summaryQueued=true;pool.reserve(if(work.engine==LocalAssistant.ID)"qwen3"else "pollinations",work.id);state.update{it.copy(summaryPending=true,summaryError="")}}
+        if(summary){summaryOwner=work.id;summaryQueued=true;pool.reserve("pollinations",work.id);state.update{it.copy(summaryPending=true,summaryError="")}}
 
         if(!(if(summary)summaries.trySend(work)else queue.trySend(work)).isSuccess){finish(work,"Omitida: hay preguntas pendientes");if(summary)clearSummary(work)}
     }
@@ -257,7 +250,11 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
     }
     private fun reconcileQuestions(around:Long?=null){
         if(!foreground||(state.value.transcriptionOnly&&(state.value.listening||state.value.starting))||!state.value.onlineAnswers||!state.value.autoAnswers)return
-        queueAudioQuestions(state.value.lines.filter{it.final||it.edited}.let{lines->if(around==null)lines.takeLast(3)else lines.filter{it.id==around}})
+        val lines=state.value.lines
+        val window=if(around==null)lines.takeLast(3)else lines.indexOfFirst{it.id==around}.let{index->
+            if(index<0)emptyList()else lines.subList((index-1).coerceAtLeast(0),(index+2).coerceAtMost(lines.size))
+        }
+        queueAudioQuestions(window)
     }
     private fun requestClassAnalysis(force:Boolean=false){
         if(!force)return
@@ -278,8 +275,8 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
             summaryQueued=true
             val work=Work(UUID.randomUUID().toString(),null,summaryRevision,"","",summary=true,epoch=epoch,analysis=true,snapshot=block,engine=current.answerEngine,token=responseToken)
             summaryOwner=work.id
-            pool.reserve(if(current.answerEngine==LocalAssistant.ID)"qwen3"else "pollinations",work.id)
-            state.update{it.copy(summaryPending=true,summaryStatus=if(current.answerEngine==LocalAssistant.ID)"Resumen solicitado · Qwen local…"else "Resumen solicitado · Pollinations…",summaryError="",onlineNotice="")}
+            pool.reserve("pollinations",work.id)
+            state.update{it.copy(summaryPending=true,summaryStatus="Resumen solicitado · Pollinations…",summaryError="",onlineNotice="")}
             if(!summaries.trySend(work).isSuccess){clearSummary(work);issue("No se pudo iniciar el resumen. Vuelve a intentar.")}
         }
     }
@@ -287,15 +284,8 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
         state.update{current->
             val validIds=snapshot.filter{line->current.lines.any{it.id==line.id&&it.revision==line.revision}}.map{it.id}.toSet()
             if(validIds.size!=snapshot.size)return@update current
-            val answers=current.answers.toMutableList()
-            if(current.autoAnswers)result.questions.forEach{q->
-                val existing=answers.indexOfFirst{it.source!=null&&AnalysisEvidence.sameQuestion(it.question,q.question)}
-                if(existing>=0&&!answers[existing].suggested&&q.suggested)return@forEach
-                val answer=LiveAnswer(if(existing>=0)answers[existing].id else UUID.randomUUID().toString(),q.source,snapshot.first{it.id==q.source}.revision,q.question,q.answer,if(q.suggested)"Lista · sugerida para repasar · IA"else "Lista · pregunta contextualizada · IA",evidence=q.evidence,suggested=q.suggested,supportingSources=q.sources)
-                if(existing>=0)answers[existing]=answer else answers.add(answer)
-            }
             val organization=result.organization.copy(map=null)
-            current.copy(organization=organization,answers=answers,summary=result.summary.ifBlank{current.summary},summaryError="",onlineNotice="")
+            current.copy(organization=organization,summary=result.summary.ifBlank{current.summary},summaryError="",onlineNotice="")
         }
     }
     fun importTranscript(text:String){
@@ -355,7 +345,7 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
         state.update{it.copy(summaryPending=true,summaryStatus="Organizando mapa…",summaryError="",onlineNotice="")}
         val work=Work(UUID.randomUUID().toString(),null,summaryRevision,topic,"",summary=true,epoch=epoch,snapshot=snapshot,research=true,engine=current.answerEngine,token=responseToken)
         summaryOwner=work.id
-        pool.reserve(if(current.answerEngine==LocalAssistant.ID)"qwen3"else "pollinations",work.id)
+        pool.reserve("pollinations",work.id)
         if(!summaries.trySend(work).isSuccess)clearSummary(work)
     }
     fun stopResponse(){
@@ -375,7 +365,7 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
     }
     fun suspendSession(){pause();finishJob?.cancel();stopResponse();warming?.cancel();debounce.values.forEach{it.cancel()};debounce.clear()}
     fun background(){state.update{it.copy(appVisible=false)};foreground=state.value.backgroundListening&&state.value.backgroundServiceActive;if(!foreground)suspendSession();if(rememberConversation)persistConversation();state.update{it.copy(history=conversations.list())}}
-    fun resumeForeground(){foreground=true;state.update{it.copy(appVisible=true)}}
+    fun resumeForeground(){foreground=true;state.update{it.copy(appVisible=true)};if(activeOwnerId!="legacy"&&(cloudReadyOwner!=activeOwnerId||SystemClock.elapsedRealtime()-lastCloudSyncAt>30_000L))beginCloudSync(activeOwnerId)}
     fun setBackgroundListening(value:Boolean){
         preferences.edit().putBoolean("background-listening",value).apply();state.update{it.copy(backgroundListening=value)}
         if(!value&&!state.value.appVisible)background()
@@ -384,15 +374,136 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
     internal fun setBackgroundServiceActive(value:Boolean){state.update{it.copy(backgroundServiceActive=value)};foreground=state.value.appVisible||(value&&state.value.backgroundListening)}
     internal fun stopFromNotification(){suspendSession();if(rememberConversation)persistConversation();state.update{it.copy(status="Escucha detenida. Conversación guardada en el historial.")}}
 
-    private fun persistConversation(){synchronized(historyLock){if(!rememberConversation)return;state.update{it.copy(automaticTitle=ConversationNaming.automatic(it))};conversations.save(sessionId,state.value);state.update{it.copy(history=conversations.list())}}}
-    fun restoreConversation(){
-        if(rememberConversation||state.value.listening||state.value.starting)return
-        synchronized(historyLock){sessionId=preferences.getLong("session-id",System.currentTimeMillis());preferences.edit().putLong("session-id",sessionId).apply();val saved=conversations.load(sessionId);if(saved!=null)state.update{it.copy(folderId=saved.folderId,organization=saved.organization,folders=conversations.folders(),conversationTitle=saved.conversationTitle,automaticTitle=saved.automaticTitle,conversationKey=sessionId,lines=saved.lines,answers=saved.answers,summary=saved.summary,summaryError="",highlights=ConversationRules.salient(saved.lines.joinToString(" "){l->l.text}))}else state.update{it.copy(folders=conversations.folders(),lines=emptyList(),answers=emptyList(),summary="",summaryError="",highlights=emptyList())};rememberConversation=true;state.update{it.copy(history=conversations.list())}}
-        prepareSpeech()
-        if(!spanishChecked){spanishChecked=true;refreshSpeechLanguages(autoSpanish=true)}
+    private fun persistConversation(){synchronized(historyLock){if(!rememberConversation)return;state.update{it.copy(automaticTitle=ConversationNaming.automatic(it))};conversations.save(sessionId,state.value);state.update{it.copy(history=conversations.list())};queueCloudSave(sessionId)}}
+    private fun beginCloudSync(uid:String){
+        if(uid=="legacy")return
+        cloudReadyOwner=null
+        state.update{it.copy(cloudStatus="Conectando al historial en la nube…")}
+        cloudMergeJob?.cancel()
+        cloudMergeJob=viewModelScope.launch(Dispatchers.IO){
+            val targets=synchronized(historyLock){if(activeOwnerId==uid)conversations to store else null}?:return@launch
+            val target=targets.first;val savedTarget=targets.second
+            val currentId=sessionId
+            val before=state.value
+            val hadCurrentRecord=target.load(currentId)!=null
+            try{
+                cloudHistory.merge(uid,target,savedTarget)
+                if(activeOwnerId!=uid)return@launch
+                cloudReadyOwner=uid
+                lastCloudSyncAt=SystemClock.elapsedRealtime()
+                val restored=target.load(currentId)
+                state.update{current->
+                    val unchanged=current.conversationKey==currentId&&!current.listening&&!current.starting&&current.lines==before.lines&&current.answers==before.answers&&current.summary==before.summary&&current.organization==before.organization&&current.conversationTitle==before.conversationTitle
+                    val withCurrent=when{
+                        restored!=null&&unchanged->current.copy(folderId=restored.folderId,organization=restored.organization,conversationTitle=restored.conversationTitle,automaticTitle=restored.automaticTitle,lines=restored.lines,answers=restored.answers,summary=restored.summary,highlights=ConversationRules.salient(restored.lines.joinToString(" "){it.text}))
+                        hadCurrentRecord&&restored==null&&unchanged->current.copy(folderId=null,organization=ClassOrganization(),conversationTitle="",automaticTitle="",lines=emptyList(),answers=emptyList(),summary="",highlights=emptyList())
+                        else->current
+                    }
+                    withCurrent.copy(history=target.list(),folders=target.folders(),cloudStatus="Historial sincronizado")
+                }
+                flushCloudChanges(uid)
+            }catch(error:CancellationException){throw error}
+            catch(_:Throwable){if(activeOwnerId==uid)state.update{it.copy(cloudStatus="Pendiente: crea Cloud Firestore y publica las reglas de acceso.")}}
+        }
+    }
+    private fun queueCloudSave(id:Long){if(activeOwnerId=="legacy")return;pendingCloudChanges[id]=false;flushCloudChanges(activeOwnerId)}
+    private fun queueCloudDelete(id:Long){if(activeOwnerId=="legacy")return;pendingCloudChanges[id]=true;flushCloudChanges(activeOwnerId)}
+    private fun queueSavedCloudSave(id:String){if(activeOwnerId=="legacy"||id.isBlank())return;pendingSavedChanges[id]=false;flushCloudChanges(activeOwnerId)}
+    private fun queueSavedCloudDelete(id:String){if(activeOwnerId=="legacy"||id.isBlank())return;pendingSavedChanges[id]=true;flushCloudChanges(activeOwnerId)}
+    private fun queueAllCloudSaves(){if(activeOwnerId=="legacy")return;conversations.cloudRecords().forEach{pendingCloudChanges[it.id]=false};store.list().forEach{pendingSavedChanges[it.cloudId]=false};flushCloudChanges(activeOwnerId)}
+    private fun flushCloudChanges(uid:String){
+        if(uid=="legacy"||cloudReadyOwner!=uid||cloudWriteJob?.isActive==true)return
+        cloudWriteJob=viewModelScope.launch(Dispatchers.IO){
+            while(activeOwnerId==uid&&cloudReadyOwner==uid&&(pendingCloudChanges.isNotEmpty()||pendingSavedChanges.isNotEmpty())){
+                delay(8000)
+                val operations=pendingCloudChanges.entries.associate{it.key to it.value}
+                for((id,deleted) in operations){
+                    if(!pendingCloudChanges.remove(id,deleted))continue
+                    try{
+                        val target=synchronized(historyLock){if(activeOwnerId==uid)conversations else null}?:return@launch
+                        if(deleted)cloudHistory.delete(uid,id)
+                        else target.cloudRecords().firstOrNull{it.id==id}?.let{cloudHistory.upload(uid,it)}
+                        if(activeOwnerId==uid)state.update{it.copy(cloudStatus="Historial sincronizado")}
+                    }catch(error:CancellationException){throw error}
+                    catch(_:Throwable){pendingCloudChanges.putIfAbsent(id,deleted);if(activeOwnerId==uid)state.update{it.copy(cloudStatus="Sincronización pendiente; se conserva una copia en el teléfono.")};return@launch}
+                }
+                val savedOperations=pendingSavedChanges.entries.associate{it.key to it.value}
+                for((id,deleted) in savedOperations){
+                    if(!pendingSavedChanges.remove(id,deleted))continue
+                    try{
+                        val target=synchronized(historyLock){if(activeOwnerId==uid)store else null}?:return@launch
+                        if(deleted)cloudHistory.deleteSaved(uid,id,target.cloudDeletions()[id]?:System.currentTimeMillis())
+                        else target.list().firstOrNull{it.cloudId==id}?.let{cloudHistory.uploadSaved(uid,it)}
+                        if(activeOwnerId==uid)state.update{it.copy(cloudStatus="Historial sincronizado")}
+                    }catch(error:CancellationException){throw error}
+                    catch(_:Throwable){pendingSavedChanges.putIfAbsent(id,deleted);if(activeOwnerId==uid)state.update{it.copy(cloudStatus="Sincronización pendiente; se conserva una copia en el teléfono.")};return@launch}
+                }
+            }
+        }
+    }
+    private fun sessionPreferenceKey()=if(activeOwnerId=="legacy")"session-id"else "session-id:$activeOwnerId"
+    private fun nextSessionId():Long{
+        val next=maxOf(System.currentTimeMillis(),preferences.getLong("last-session-id",0L)+1L,conversations.maxSessionId()+1L)
+        preferences.edit().putLong("last-session-id",next).apply()
+        return next
+    }
+    /** Restores only the account's local partition. Returns true when the user can choose to import legacy local data. */
+    fun restoreConversation(userId:String?=null):Boolean{
+        if(state.value.listening||state.value.starting)return false
+        val requestedOwner=userId?.takeIf{it.isNotBlank()}?:"legacy"
+        synchronized(historyLock){
+            if(rememberConversation&&activeOwnerId==requestedOwner)return false
+            if(rememberConversation)persistConversation()
+            if(activeOwnerId!=requestedOwner){
+                cloudReadyOwner=null;pendingCloudChanges.clear();pendingSavedChanges.clear();cloudMergeJob?.cancel();cloudWriteJob?.cancel()
+                rememberConversation=false
+                conversations.close();store.close()
+                activeOwnerId=requestedOwner
+                conversations=ConversationStore(context,ownerId=requestedOwner)
+                store=SavedStore(context,ownerId=requestedOwner)
+                state.update{it.copy(folderId=null,folders=emptyList(),legacyDataAvailable=false,organization=ClassOrganization(),conversationTitle="",automaticTitle="",history=emptyList(),lines=emptyList(),answers=emptyList(),summary="",summaryError="",highlights=emptyList(),saved=emptyList())}
+            }
+            val sessionKey=sessionPreferenceKey()
+            sessionId=preferences.getLong(sessionKey,0L).takeIf{it>0L}?:nextSessionId()
+            preferences.edit().putLong(sessionKey,sessionId).apply()
+            val saved=conversations.load(sessionId)
+            if(saved!=null)state.update{it.copy(folderId=saved.folderId,organization=saved.organization,folders=conversations.folders(),conversationTitle=saved.conversationTitle,automaticTitle=saved.automaticTitle,conversationKey=sessionId,lines=saved.lines,answers=saved.answers,summary=saved.summary,summaryError="",highlights=ConversationRules.salient(saved.lines.joinToString(" "){l->l.text}))}
+            else state.update{it.copy(folderId=null,organization=ClassOrganization(),folders=conversations.folders(),conversationTitle="",automaticTitle="",conversationKey=sessionId,lines=emptyList(),answers=emptyList(),summary="",summaryError="",highlights=emptyList())}
+            rememberConversation=true
+            reloadSaved()
+            val legacyAvailable=requestedOwner!="legacy"&&(conversations.hasLegacyData()||store.hasLegacyData())
+            state.update{it.copy(history=conversations.list(),legacyDataAvailable=legacyAvailable)}
+            val prompt=legacyAvailable&&!preferences.getBoolean("legacy-import-dismissed:$requestedOwner",false)
+            if(requestedOwner!="legacy")beginCloudSync(requestedOwner)
+            if(!spanishChecked){spanishChecked=true;refreshSpeechLanguages(autoSpanish=true)}
+            return prompt
+        }
+    }
+    fun dismissLegacyImportPrompt(){if(activeOwnerId!="legacy")preferences.edit().putBoolean("legacy-import-dismissed:$activeOwnerId",true).apply()}
+    fun importLegacyData(){
+        if(activeOwnerId=="legacy")return
+        synchronized(historyLock){
+            conversations.assignLegacyDataToCurrentOwner();store.assignLegacyDataToCurrentOwner()
+            preferences.edit().putBoolean("legacy-import-dismissed:$activeOwnerId",true).apply()
+            state.update{it.copy(history=conversations.list(),folders=conversations.folders(),saved=store.list(),legacyDataAvailable=false)}
+            queueAllCloudSaves()
+        }
+    }
+    fun deactivateAccount(){
+        if(activeOwnerId=="legacy")return
+        suspendSession()
+        if(rememberConversation)persistConversation()
+        synchronized(historyLock){
+            cloudReadyOwner=null;pendingCloudChanges.clear();pendingSavedChanges.clear();cloudMergeJob?.cancel();cloudWriteJob?.cancel()
+            rememberConversation=false
+            conversations.close();store.close()
+            activeOwnerId="legacy"
+            conversations=ConversationStore(context,ownerId="legacy")
+            store=SavedStore(context,ownerId="legacy")
+            state.update{it.copy(folderId=null,folders=emptyList(),legacyDataAvailable=false,organization=ClassOrganization(),conversationTitle="",automaticTitle="",conversationKey=0,history=emptyList(),lines=emptyList(),answers=emptyList(),summary="",summaryError="",highlights=emptyList(),saved=emptyList(),listening=false,starting=false,generating=false,summaryPending=false,analysisRunning=false,status="Sesión cerrada.")}
+        }
     }
     internal fun temporaryConversation(){synchronized(historyLock){rememberConversation=false};clearSession(keepHistory=true)}
-    fun prepareSpeech(){if(state.value.speechEngine!="moonshine")return;if(speechWarm?.isActive==true||engines.speech!=null)return;speechWarm=viewModelScope.launch(Dispatchers.IO){try{modelLock.withLock{engines.loadSpeech()}}catch(_:Throwable){}}}
     private fun switchConversation(id:Long?,newFolder:Long?=null){
         if(conversationSwitch?.isActive==true)return
         suspendSession()
@@ -410,13 +521,13 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
                     signatures.clear()
                     if(id==null){
                         clearSession(keepHistory=true)
-                        sessionId=System.currentTimeMillis()
-                        preferences.edit().putLong("session-id",sessionId).apply()
+                        sessionId=nextSessionId()
+                        preferences.edit().putLong(sessionPreferenceKey(),sessionId).apply()
                         state.update{it.copy(conversationKey=sessionId,folderId=newFolder,status="Nueva conversación. Pulsa el micrófono para escuchar.",history=conversations.list(),folders=conversations.folders())}
                     }else{
                         val saved=conversations.load(id)?:error("Conversación no disponible")
                         sessionId=id
-                        preferences.edit().putLong("session-id",id).apply()
+                        preferences.edit().putLong(sessionPreferenceKey(),id).apply()
                         state.update{it.copy(folderId=saved.folderId,organization=saved.organization,folders=conversations.folders(),conversationTitle=saved.conversationTitle,automaticTitle=saved.automaticTitle,conversationKey=sessionId,lines=saved.lines,answers=saved.answers,summary=saved.summary,summaryError="",highlights=ConversationRules.salient(saved.lines.joinToString(" "){l->l.text}),organizationRevision=it.organizationRevision+1,history=conversations.list(),status="Conversación abierta. Pulsa el micrófono para continuar.")}
                     }
                 }
@@ -431,16 +542,22 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
     fun renameConversation(id:Long,title:String){
         if(title.isBlank())return
         if(id==sessionId||id==state.value.conversationKey)renameConversation(title)
-        else synchronized(historyLock){conversations.rename(id,title.trim().take(100));state.update{it.copy(history=conversations.list())}}
+        else synchronized(historyLock){conversations.rename(id,title.trim().take(100));state.update{it.copy(history=conversations.list())};queueCloudSave(id)}
     }
+    fun setConversationPinned(id:Long,pinned:Boolean){synchronized(historyLock){
+        conversations.setPinned(id,pinned)
+        state.update{it.copy(history=conversations.list())}
+        queueCloudSave(id)
+    }}
     fun createFolder(name:String):Long?=synchronized(historyLock){
         runCatching{conversations.createFolder(name).also{state.update{s->s.copy(folders=conversations.folders())}}}.getOrElse{state.update{s->s.copy(status=it.message?:"No se pudo crear la carpeta.")};null}
     }
-    fun renameFolder(id:Long,name:String){synchronized(historyLock){runCatching{conversations.renameFolder(id,name)}.onFailure{e->state.update{it.copy(status=e.message?:"No se pudo cambiar el nombre.")}};state.update{it.copy(folders=conversations.folders())}}}
-    fun deleteFolder(id:Long){synchronized(historyLock){conversations.deleteFolder(id);state.update{it.copy(folderId=if(it.folderId==id)null else it.folderId,folders=conversations.folders(),history=conversations.list())}}}
+    fun renameFolder(id:Long,name:String){synchronized(historyLock){runCatching{conversations.renameFolder(id,name)}.onFailure{e->state.update{it.copy(status=e.message?:"No se pudo cambiar el nombre.")}};state.update{it.copy(folders=conversations.folders())};queueAllCloudSaves()}}
+    fun deleteFolder(id:Long){synchronized(historyLock){conversations.deleteFolder(id);state.update{it.copy(folderId=if(it.folderId==id)null else it.folderId,folders=conversations.folders(),history=conversations.list())};queueAllCloudSaves()}}
     fun moveConversation(id:Long?,folder:Long?){synchronized(historyLock){
         if(id==null||id==sessionId||id==state.value.conversationKey){state.update{it.copy(folderId=folder)};if(rememberConversation)conversations.save(sessionId,state.value);conversations.move(sessionId,folder)}else conversations.move(id,folder)
         state.update{it.copy(history=conversations.list())}
+        if(id==null||id==sessionId||id==state.value.conversationKey)queueCloudSave(sessionId)else queueCloudSave(id)
     }}
     fun setSpeechLanguage(language:String){
         require(language in state.value.localSpeechModels.languages())
@@ -475,10 +592,10 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
             state.update{it.copy(localSpeechModels=report.copy(message=if(report.hasLanguage(language))"${languageName(language)} listo sin conexión"else message))}
         }catch(e:CancellationException){throw e}catch(e:Throwable){state.update{it.copy(localSpeechModels=it.localSpeechModels.copy(downloading=false,progress=null,message="No se pudo descargar el idioma. Reintenta con conexión."))}}
     }
-    fun deleteConversation(id:Long){if(id==sessionId)clearSession()else synchronized(historyLock){conversations.delete(id)};state.update{it.copy(history=conversations.list())}}
+    fun deleteConversation(id:Long){if(id==sessionId)clearSession()else synchronized(historyLock){conversations.delete(id);queueCloudDelete(id)};state.update{it.copy(history=conversations.list())}}
 
-    fun clearSession(keepHistory:Boolean=false){suspendSession();epoch++;debounce.values.forEach{it.cancel()};debounce.clear();signatures.clear();state.update{it.copy(conversationTitle="",automaticTitle="",folderId=null,organization=ClassOrganization(),onlineNotice="",conversationKey=System.nanoTime(),organizationRevision=0,lines=emptyList(),answers=emptyList(),summary="",summaryError="",highlights=emptyList(),status="Sesión borrada. Los textos guardados se conservan.")};if(rememberConversation&&!keepHistory)synchronized(historyLock){conversations.delete(sessionId)};state.update{it.copy(history=conversations.list())}}
-    fun setSpeechEngine(value:String){require(value in listOf("moonshine","system","soniqo"));pause();preferences.edit().putString("speech-engine",value).apply();state.update{it.copy(speechEngine=value)};if(value=="moonshine")prepareSpeech()}
+    fun clearSession(keepHistory:Boolean=false){val removedId=sessionId;suspendSession();epoch++;debounce.values.forEach{it.cancel()};debounce.clear();signatures.clear();state.update{it.copy(conversationTitle="",automaticTitle="",folderId=null,organization=ClassOrganization(),onlineNotice="",conversationKey=System.nanoTime(),organizationRevision=0,lines=emptyList(),answers=emptyList(),summary="",summaryError="",highlights=emptyList(),status="Sesión borrada. Los textos guardados se conservan.")};if(rememberConversation&&!keepHistory)synchronized(historyLock){conversations.delete(removedId);queueCloudDelete(removedId)};state.update{it.copy(history=conversations.list())}}
+    fun setSpeechEngine(@Suppress("UNUSED_PARAMETER") value:String){pause();preferences.edit().putString("speech-engine","system").apply();state.update{it.copy(speechEngine="system")}}
     fun setTranscriptionOnly(value:Boolean){preferences.edit().putBoolean("transcription-only",value).apply();state.update{it.copy(transcriptionOnly=value)};if(value){stopResponse();debounce.values.forEach{it.cancel()};debounce.clear()}else{signatures.clear();reconcileQuestions()}}
     internal fun recoverSystemSpeech(message:String,token:Long=speechSessionToken){
         if(token!=speechSessionToken||!foreground)return
@@ -503,81 +620,98 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
     fun listen(projection:android.media.projection.MediaProjection?=null){startListening(projection,null)}
     internal fun listenFromAudio(source:android.os.ParcelFileDescriptor){startListening(null,source)}
     @Suppress("MissingPermission")
+    private suspend fun streamPlaybackToGoogle(projection:android.media.projection.MediaProjection,captureEpoch:Long,sessionToken:Long){
+        val captureContext=currentCoroutineContext()
+        var input:AudioRecord?=null
+        var speech:SystemSpeech?=null
+        var output:android.os.ParcelFileDescriptor.AutoCloseOutputStream?=null
+        var pcm=ByteArray(6400)
+        var shorts=ShortArray(3200)
+        try{
+            val minimum=AudioRecord.getMinBufferSize(16000,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT);check(minimum>0)
+            val config=AudioPlaybackCaptureConfiguration.Builder(projection).addMatchingUsage(AudioAttributes.USAGE_MEDIA).addMatchingUsage(AudioAttributes.USAGE_GAME).addMatchingUsage(AudioAttributes.USAGE_UNKNOWN).excludeUid(android.os.Process.myUid()).build()
+            input=AudioRecord.Builder().setAudioPlaybackCaptureConfig(config).setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(16000).setChannelMask(AudioFormat.CHANNEL_IN_MONO).build()).setBufferSizeInBytes(maxOf(minimum,6400)).build()
+            check(input.state==AudioRecord.STATE_INITIALIZED){"No se pudo capturar el audio del teléfono."}
+            val pipe=android.os.ParcelFileDescriptor.createPipe()
+            speech=SystemSpeech(context,{id,text,final->if(epoch==captureEpoch&&sessionToken==speechSessionToken)observe(id,text,final,captureEpoch)},{if(sessionToken==speechSessionToken)state.update{it.copy(starting=false,listening=true,status="Escuchando · Google local")}},{message->
+                if(sessionToken==speechSessionToken){state.update{it.copy(starting=false,listening=false,audioLevel=0f,status=message)};pause()}
+            },{message->
+                if(sessionToken==speechSessionToken){state.update{it.copy(starting=false,listening=false,audioLevel=0f,status=message)};pause()}
+            })
+            systemSpeech=speech
+            withContext(Dispatchers.Main.immediate){speech.start(pipe[0],state.value.speechLanguage)}
+            output=android.os.ParcelFileDescriptor.AutoCloseOutputStream(pipe[1])
+            recorder=input
+            input.startRecording()
+            var silent=0
+            while(captureContext.isActive&&sessionToken==speechSessionToken){
+                val count=input.read(shorts,0,shorts.size);check(count>0){"Se interrumpió la captura del teléfono."}
+                var energy=0.0
+                for(i in 0 until count){
+                    val sample=shorts[i].toInt()
+                    energy+=(sample/32768.0)*(sample/32768.0)
+                    pcm[i*2]=sample.toByte();pcm[i*2+1]=(sample shr 8).toByte()
+                }
+                val rms=kotlin.math.sqrt(energy/count).toFloat()
+                state.update{it.copy(audioLevel=(rms*5).coerceIn(0f,1f))}
+                silent=if(rms<.00001f)silent+count else 0
+                check(silent<16000*12){"No llega audio del teléfono. Comprueba que el video esté reproduciéndose; algunas aplicaciones bloquean la captura."}
+                output.write(pcm,0,count*2)
+                pcm.fill(0)
+            }
+        }finally{
+            pcm.fill(0);shorts.fill(0);runCatching{output?.close()};runCatching{speech?.stop()}
+            runCatching{input?.stop()};runCatching{input?.release()};recorder=null
+            withContext(NonCancellable+Dispatchers.Main.immediate){ListeningService.stopCapture()}
+            if(sessionToken==speechSessionToken)state.update{it.copy(listening=false,starting=false,audioLevel=0f,status=if(it.status.startsWith("No se pudo")||it.status.startsWith("No llega"))it.status else "Escucha pausada.")}
+        }
+    }
+    @Suppress("MissingPermission")
     private fun startListening(projection:android.media.projection.MediaProjection?,audioSource:android.os.ParcelFileDescriptor?,recovering:Boolean=false){
-        if(conversationSwitch?.isActive==true||state.value.starting||state.value.listening||capture?.isActive==true||importJob?.isActive==true)return
+        if(conversationSwitch?.isActive==true||state.value.starting||state.value.listening||capture?.isActive==true)return
+        if(state.value.localSpeechModels.downloading||state.value.localSpeechModels.checking){
+            state.update{it.copy(status="Espera a que termine la preparación del idioma.")}
+            return
+        }
         if(state.value.onlineAnswers&&state.value.autoAnswers&&!state.value.transcriptionOnly&&state.value.answerEngine!=LocalAssistant.ID&&warming?.isActive!=true){
             warming=viewModelScope.launch(Dispatchers.IO){try{online.warmConnection()}catch(e:CancellationException){throw e}catch(_:Exception){/* Audio does not depend on network availability. */}}
         }
-        if(projection==null&&state.value.speechEngine=="system"){
-            if(state.value.localSpeechModels.downloading||state.value.localSpeechModels.checking){state.update{it.copy(status="Espera a que termine la preparación del idioma.")};return}
-            if(!recovering)speechRecoveries=0
-            state.update{it.copy(starting=true,status="Preparando reconocimiento local de Android…")}
-            val captureEpoch=epoch
-            val sessionToken=++speechSessionToken
-            capture=viewModelScope.launch{try{closingSystemSpeech?.awaitStopped();closingSystemSpeech=null;if(state.value.transcriptionOnly){stopResponse();warming?.cancelAndJoin();generation?.join();modelLock.withLock{engines.unloadLanguage();state.update{it.copy(languageReady=false)}}};speechWarm?.join();modelLock.withLock{engines.unloadSpeech()}
-                systemSpeech=SystemSpeech(context,{id,text,final->if(epoch==captureEpoch && sessionToken==speechSessionToken)observe(id,text,final,captureEpoch)},{if(sessionToken==speechSessionToken)state.update{it.copy(starting=false,listening=true,status="Escuchando · Android local continuo")}},{message->if(sessionToken==speechSessionToken)state.update{it.copy(starting=false,listening=false,audioLevel=0f,status=message)}},{message->recoverSystemSpeech(message,sessionToken)},{level->if(sessionToken==speechSessionToken)state.update{it.copy(audioLevel=level)}})
-                currentCoroutineContext().ensureActive();systemSpeech?.start(audioSource,state.value.speechLanguage)
-            }catch(e:CancellationException){throw e}catch(e:Throwable){state.update{it.copy(starting=false,listening=false,status="No se pudo preparar el reconocimiento local: ${e.message}")}}};return
-        }
-        state.update{it.copy(starting=true,status="Preparando modelo de voz; aún no se está grabando…")}
-        val previousCapture=capture
-        capture=viewModelScope.launch(Dispatchers.IO){
-            previousCapture?.join();currentCoroutineContext().ensureActive();state.update{it.copy(starting=true)}
-            var input:AudioRecord?=null
-            var soniqo:SoniqoSpeech?=null
-            var listener:java.util.function.Consumer<TranscriptEvent>?=null
-            var started=false
-            var noise:android.media.audiofx.NoiseSuppressor?=null
+        if(!recovering)speechRecoveries=0
+        state.update{it.copy(starting=true,status="Preparando reconocimiento local de Google…")}
+        val captureEpoch=epoch
+        val sessionToken=++speechSessionToken
+        capture=viewModelScope.launch{
             try{
-                if(state.value.transcriptionOnly){stopResponse();warming?.cancelAndJoin();generation?.join();modelLock.withLock{engines.unloadLanguage();state.update{it.copy(languageReady=false)}}}
-                val useSoniqo=state.value.speechEngine=="soniqo"
-                val captureEpoch=epoch
-                speechWarm?.join()
-                if(useSoniqo){
-                    modelLock.withLock{engines.unloadSpeech()}
-                    soniqo=SoniqoSpeech(File(context.filesDir,"soniqo"),this,{id,text,final->if(epoch==captureEpoch)observe(id,text,final,captureEpoch)},{message->state.update{it.copy(status="Error del motor Soniqo: $message")}})
-                }else{
-                    if(engines.speech==null)modelLock.withLock{engines.loadSpeech()}
-                    val streamBase=++streamSerial*1000000L
-                    val visitor=object:TranscriptEventListener(){
-                        fun update(line:TranscriptLine,final:Boolean){if(epoch==captureEpoch)observe(streamBase+line.id,line.text,final,captureEpoch);line.audioData=null}
-                        override fun onLineTextChanged(e:TranscriptEvent.LineTextChanged){update(e.line,false)}
-                        override fun onLineCompleted(e:TranscriptEvent.LineCompleted){update(e.line,true)}
-                    }
-                    listener=java.util.function.Consumer{it.accept(visitor)};engines.speech?.addListener(listener)
+                closingSystemSpeech?.awaitStopped()
+                closingSystemSpeech=null
+                if(projection!=null){
+                    streamPlaybackToGoogle(projection,captureEpoch,sessionToken)
+                    return@launch
                 }
+                if(state.value.transcriptionOnly){
+                    stopResponse()
+                    warming?.cancelAndJoin()
+                    generation?.join()
+                }
+                systemSpeech=SystemSpeech(context,
+                    {id,text,final->if(epoch==captureEpoch&&sessionToken==speechSessionToken)observe(id,text,final,captureEpoch)},
+                    {if(sessionToken==speechSessionToken)state.update{it.copy(starting=false,listening=true,status="Escuchando · Google local")}},
+                    {message->if(sessionToken==speechSessionToken){state.update{it.copy(starting=false,listening=false,audioLevel=0f,status=message)};pause()}},
+                    {message->if(sessionToken==speechSessionToken)recoverSystemSpeech(message,sessionToken)},
+                    {level->if(sessionToken==speechSessionToken)state.update{it.copy(audioLevel=level)}}
+                )
                 currentCoroutineContext().ensureActive()
-                val min=AudioRecord.getMinBufferSize(16000,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT);check(min>0)
-                input=if(projection==null)AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION,16000,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT,maxOf(min,6400))else{
-                    val config=AudioPlaybackCaptureConfiguration.Builder(projection).addMatchingUsage(AudioAttributes.USAGE_MEDIA).addMatchingUsage(AudioAttributes.USAGE_GAME).addMatchingUsage(AudioAttributes.USAGE_UNKNOWN).excludeUid(android.os.Process.myUid()).build()
-                    AudioRecord.Builder().setAudioPlaybackCaptureConfig(config).setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(16000).setChannelMask(AudioFormat.CHANNEL_IN_MONO).build()).setBufferSizeInBytes(maxOf(min,6400)).build()
-                };check(input.state==AudioRecord.STATE_INITIALIZED){"No se pudo abrir el micrófono."}
-                noise=runCatching{if(projection==null&&android.media.audiofx.NoiseSuppressor.isAvailable())android.media.audiofx.NoiseSuppressor.create(input.audioSessionId)?.apply{enabled=true}else null}.getOrNull()
-                recorder=input;if(soniqo!=null)soniqo.start()else engines.speech?.start();started=true;input.startRecording();state.update{it.copy(listening=true,starting=false,status=if(projection==null)"Escuchando micrófono · audio solo en memoria"else "Audio directo del video · sin micrófono ni imágenes")}
-
-                var emptyPlaybackFrames=0
-                val shorts=ShortArray(3200)
-                try{while(isActive){val n=input.read(shorts,0,shorts.size);check(n>0){"Captura detenida."};val audio=FloatArray(n){shorts[it]/32768f};val rms=kotlin.math.sqrt(audio.sumOf{(it*it).toDouble()}/n).toFloat();state.update{it.copy(audioLevel=(rms*5).coerceIn(0f,1f))};if(projection!=null){emptyPlaybackFrames=if(rms<.00001f)emptyPlaybackFrames+n else 0;if(emptyPlaybackFrames>=16000*12){audio.fill(0f);error("No llega audio del video. Comprueba que el video esté reproduciéndose; algunas aplicaciones bloquean la captura. No se cambiará al micrófono.")}};try{if(soniqo!=null)soniqo.addAudio(audio)else engines.speech?.addAudio(audio,16000)}finally{audio.fill(0f);shorts.fill(0)}}}finally{shorts.fill(0)}
-            }catch(e:CancellationException){}catch(e:Throwable){if(isActive)state.update{it.copy(status="No se pudo escuchar: ${e.message}")}}
-            finally{runCatching{soniqo?.close()};runCatching{input?.stop()};noise?.release();input?.release();recorder=null;if(projection!=null)withContext(NonCancellable+Dispatchers.Main.immediate){ListeningService.stopCapture()};if(started)runCatching{engines.speech?.stop()};listener?.let{runCatching{engines.speech?.removeListener(it)}};state.update{it.copy(listening=false,starting=false,audioLevel=0f,status=if(it.status.startsWith("No se pudo"))it.status else "Escucha pausada.")}}
+                systemSpeech?.start(audioSource,state.value.speechLanguage)
+            }catch(e:CancellationException){throw e}
+            catch(e:Throwable){state.update{it.copy(starting=false,listening=false,status="No se pudo preparar el reconocimiento local: ${e.message}")}}
         }
     }
-    fun importSoniqo(uri:Uri){
-        if(state.value.preparing)return
-        suspendSession();state.update{it.copy(preparing=true,status="Importando modelos de Soniqo…")}
-        importJob=viewModelScope.launch(Dispatchers.IO){try{capture?.join();ModelImport.soniqo(context,uri);preferences.edit().putString("speech-engine","soniqo").apply();state.update{it.copy(speechEngine="soniqo",status="Soniqo listo. Pulsa el micrófono.")}}catch(e:Throwable){state.update{it.copy(status="No se pudo importar Soniqo: ${e.message}")}}finally{state.update{it.copy(preparing=false)};refreshModels()}}
-    }
-    fun importModel(uri:Uri,speech:Boolean){
-        if(state.value.preparing)return
-        suspendSession();state.update{it.copy(preparing=true,status="Importando modelo…")}
-        importJob=viewModelScope.launch(Dispatchers.IO){try{capture?.join();generation?.join();modelLock.withLock{engines.close();state.update{it.copy(languageReady=false)};if(speech)ModelImport.speech(context,uri)else ModelImport.language(context,uri)};if(!speech)setAnswerEngine(LocalAssistant.ID);state.update{it.copy(status=if(speech)"Modelo de voz importado."else "Qwen3 importado y seleccionado para el chat.")}}catch(e:Throwable){state.update{it.copy(status="No se pudo importar: ${e.message}")}}finally{state.update{it.copy(preparing=false)};refreshModels()}}
-    }
-    private fun refreshModels(){val available=File(context.filesDir,"model.litertlm").exists();state.update{it.copy(localModelAvailable=available,models="Soniqo: ${if(File(context.filesDir,"soniqo/parakeet-encoder-int8.onnx").exists())"listo"else "importar ZIP"} · Voz: ${if(File(context.filesDir,"speech/streaming_config.json").exists())"lista" else "importar ZIP"} · Respuestas: ${if(!it.onlineAnswers)"desactivadas"else if(it.answerEngine!="pollinations"){if(available)"Qwen local · listo"else "importar Qwen3 .litertlm"}else "online · Pollinations Classic"}")}}
+    private fun refreshModels(){val available=File(context.filesDir,"model.litertlm").exists();state.update{it.copy(localModelAvailable=available,models="Transcripción: Google local · Respuestas: ${if(!it.onlineAnswers)"desactivadas"else if(it.answerEngine!="pollinations"){if(available)"Qwen local · listo"else "importar Qwen3 .litertlm"}else "online · Pollinations Classic"}")}}
     private fun reloadSaved(){state.update{it.copy(saved=store.list())}}
     fun save(id:Long?,kind:String,text:String,scope:String,due:String)=saveWithSource(id,kind,text,scope,due,"Texto escrito por usuario")
-    fun saveWithSource(id:Long?,kind:String,text:String,scope:String,due:String,source:String){store.saveWithSource(id,kind,text,scope,due,source);reloadSaved()}
-    fun delete(id:Long){store.delete(id);reloadSaved()}
-    fun done(id:Long,value:Boolean){store.done(id,value);reloadSaved()}
+    fun saveWithSource(id:Long?,kind:String,text:String,scope:String,due:String,source:String){val cloudId=store.saveWithSource(id,kind,text,scope,due,source);reloadSaved();queueSavedCloudSave(cloudId)}
+    fun delete(id:Long){val cloudId=store.cloudId(id);store.delete(id);reloadSaved();cloudId?.let(::queueSavedCloudDelete)}
+    fun done(id:Long,value:Boolean){val cloudId=store.cloudId(id);store.done(id,value);reloadSaved();cloudId?.let(::queueSavedCloudSave)}
     fun releaseModels(after:()->Unit){suspendSession();viewModelScope.launch{capture?.join();generation?.join();withContext(Dispatchers.IO){modelLock.withLock{engines.close();state.update{it.copy(languageReady=false)}}};after()}}
     override fun onCleared(){localModelsJob?.cancel();suspendSession();queue.close();summaries.close();val c=capture;val g=generation;CoroutineScope(Dispatchers.IO).launch{c?.join();g?.join();modelLock.withLock{engines.close()};store.close();synchronized(historyLock){conversations.close()}};super.onCleared()}
 }

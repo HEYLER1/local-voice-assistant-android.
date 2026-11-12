@@ -16,7 +16,7 @@ class FloatingAnswerNavigationTest {
         rule.runOnUiThread{
             val vm=rule.activity.assistant;vm.temporaryConversation()
             vm.state.value=AssistantState(answers=listOf(LiveAnswer("other",2,1,"¿Qué son las pruebas unitarias?","Otra respuesta.","Lista"),target))
-            rule.activity.setContent{VoiceTheme{AssistantScreen(vm,{},{},{},{},{},{},requestedAnswerId=request.value,onAnswerRequestHandled={request.value=null})}}
+            rule.activity.setContent{VoiceTheme{AssistantScreen(vm,{},{},{},requestedAnswerId=request.value,onAnswerRequestHandled={request.value=null})}}
         }
         repeat(2){
             rule.runOnIdle{request.value="target"}

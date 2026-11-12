@@ -71,7 +71,7 @@ class OnlineAssistantTest{
         }.build()
         val result=OnlineAssistant(client).analyze(listOf(SpeechLine(1,"La Luna pasa entre la Tierra y el Sol durante un eclipse solar.",true)),AssistantState())
         assertTrue(result.summary.isNotBlank());assertEquals("low",sent!!.getString("reasoning_effort"))
-        assertEquals(6144,sent!!.getInt("max_tokens"))
+        assertEquals(3072,sent!!.getInt("max_tokens"))
         assertEquals("json_object",sent!!.getJSONObject("response_format").getString("type"))
         assertTrue(sent!!.getJSONArray("messages").getJSONObject(0).getString("content").contains("No generes ni respondas preguntas"))
     }

@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -14,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.Role
@@ -36,48 +38,47 @@ import androidx.compose.ui.unit.sp
     LaunchedEffect(copied){if(copied){kotlinx.coroutines.delay(1200);copied=false}}
     var section by rememberSaveable{mutableIntStateOf(if(s.organization.sections.isNotEmpty())6 else 0)}
     var inspected by rememberSaveable(s.conversationKey){mutableStateOf<String?>(null)}
-    val nodes=remember(s.organization,guide,lesson,s.answers.size){
+    val relevantQuestions=s.answers.count{!it.suggested}
+    val nodes=remember(s.organization,guide,lesson,relevantQuestions){
         if(map!=null)map.branches.mapIndexed{index,branch->SummaryCanvasNode("branch:$index",branch.title,"",branch=branch)}else buildList{
-            val reserved=listOf(lesson.tasks.isNotEmpty(),lesson.exams.isNotEmpty(),s.answers.isNotEmpty()).count{it}
+            val reserved=listOf(lesson.tasks.isNotEmpty(),lesson.exams.isNotEmpty(),relevantQuestions>0).count{it}
             if(s.organization.sections.isNotEmpty())KnowledgeSummary.previousSections(s).take(6-reserved).forEach{note->add(SummaryCanvasNode("note:${note.title}",note.title,"Apuntes organizados",note=note))}
             if(lesson.tasks.isNotEmpty())add(SummaryCanvasNode("tasks","Por preparar","${lesson.tasks.size} ${if(lesson.tasks.size==1)"indicación"else "indicaciones"}",category=4))
             if(lesson.exams.isNotEmpty())add(SummaryCanvasNode("exam","Examen","${lesson.exams.size} ${if(lesson.exams.size==1)"aviso"else "avisos"}",category=5))
-            if(s.answers.isNotEmpty())add(SummaryCanvasNode("review","Preguntas","${s.answers.size} ${if(s.answers.size==1)"pregunta"else "preguntas"}",category=2))
+            if(relevantQuestions>0)add(SummaryCanvasNode("review","Preguntas","$relevantQuestions ${if(relevantQuestions==1)"pregunta"else "preguntas"}",category=2))
 
         }.take(6)
     }
     val canRefresh=!s.summaryPending&&!s.analysisRunning&&!s.researchRunning
-    val canResearch=canRefresh&&s.onlineAnswers&&s.lines.any{it.final||it.edited}
     val issue=SummaryIssues.display(s.summaryError)
     val tools:@Composable ()->Unit={
-        IconButton(onClick={inspected="browse"},modifier=Modifier.size(40.dp).semantics{contentDescription="Explorar apuntes"}){VoiceGlyph("notes",MaterialTheme.colorScheme.onSurfaceVariant,Modifier.size(20.dp))}
-        IconButton(onClick=onResearch,enabled=canResearch&&KnowledgeSummary.title(s)!=ConversationNaming.UNKNOWN,modifier=Modifier.size(40.dp).semantics{contentDescription=if(s.researchRunning)"Ampliando el tema"else "Ampliar y organizar mapa"}){if(s.researchRunning)CircularProgressIndicator(Modifier.size(18.dp),strokeWidth=2.dp,color=VoiceGreen)else VoiceGlyph("search",if(canResearch)VoiceGreen else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha=.4f),Modifier.size(20.dp))}
-        TextButton(onClick=onRefresh,enabled=canRefresh,modifier=Modifier.semantics{contentDescription="Generar resumen"}){
-            if(s.summaryPending||s.analysisRunning)CircularProgressIndicator(Modifier.size(16.dp),strokeWidth=2.dp,color=VoiceAccent)else Text("Generar resumen",color=VoiceAccent)
+        Column(horizontalAlignment=Alignment.Start){
+            IconButton(onClick=onRefresh,enabled=canRefresh,modifier=Modifier.size(44.dp).background(Color(0xFF302642),CircleShape).semantics{contentDescription="Generar resumen"}){
+                if(s.summaryPending||s.analysisRunning||s.researchRunning)CircularProgressIndicator(Modifier.size(18.dp),strokeWidth=2.dp,color=VoiceAccent)
+                else VoiceGlyph("spark",VoiceAccent,Modifier.size(20.dp))
+            }
+            if(issue.isNotBlank())Text(issue,color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.labelSmall,modifier=Modifier.widthIn(max=300.dp).padding(start=8.dp,top=4.dp))
         }
-        if(issue.isNotBlank())IconButton(onClick={inspected="status"},modifier=Modifier.size(40.dp).semantics{contentDescription="Ver aviso del resumen"}){Text("!",color=VoiceAccent,fontWeight=FontWeight.Bold)}
     }
     BoxWithConstraints(modifier.fillMaxWidth()){
         val viewport=if(constraints.hasBoundedHeight)Modifier.fillMaxSize()else Modifier.fillMaxWidth().height(560.dp)
         if(s.lines.isEmpty()&&s.summary.isBlank())Box(viewport){
             Column(Modifier.align(Alignment.TopStart).padding(start=8.dp)){
                 Row{tools()}
-                SummaryFeedback(s.summaryStatus,issue)
             }
             VoiceGlyph("spark",MaterialTheme.colorScheme.outline,Modifier.align(Alignment.Center).size(36.dp).semantics{contentDescription="Resumen sin contenido"})
         }else {
             SummaryCanvas(topic,nodes,{inspected=it?.id?:"summary"},viewport,{
-                Column{Row{tools()};SummaryFeedback(s.summaryStatus,issue)}
+                Column{Row{tools()}}
             },ReadableAnswer.format(map?.overview?:SummaryQuality.display(s.summary)))
-            if(map==null&&canResearch&&KnowledgeSummary.title(s)!=ConversationNaming.UNKNOWN)TextButton(onClick=onResearch,modifier=Modifier.align(Alignment.BottomStart).padding(8.dp)){Text("Ampliar y organizar mapa",color=VoiceGreen)}
         }
     }
     val node=nodes.firstOrNull{it.id==inspected}
-    if(inspected=="summary"||inspected=="browse"||inspected=="status"||node!=null)ModalBottomSheet(onDismissRequest={inspected=null},sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true),containerColor=androidx.compose.ui.graphics.Color(0xFF141827)){
+    if(inspected=="summary"||inspected=="browse"||node!=null)ModalBottomSheet(onDismissRequest={inspected=null},sheetState=rememberModalBottomSheetState(skipPartiallyExpanded=true),containerColor=androidx.compose.ui.graphics.Color(0xFF141827)){
         val detailSize=if(inspected=="summary"||inspected=="browse")Modifier.fillMaxHeight(.9f)else Modifier.heightIn(max=600.dp)
         Column(Modifier.fillMaxWidth().then(detailSize).navigationBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal=20.dp).padding(bottom=20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
             Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.Top){
-                Text(if(inspected=="browse")"Contenido"else if(inspected=="status")"Aviso"else node?.title?:topic,modifier=Modifier.weight(1f),style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.SemiBold)
+                Text(if(inspected=="browse")"Contenido"else node?.title?:topic,modifier=Modifier.weight(1f),style=MaterialTheme.typography.titleLarge,fontWeight=FontWeight.SemiBold)
                 if(inspected=="summary"&&(map!=null||s.summary.isNotBlank()||s.organization.sections.isNotEmpty()))IconButton(onClick={
                     if(onCopy!=null)onCopy(document)else context.getSystemService(android.content.ClipboardManager::class.java)?.setPrimaryClip(
                         android.content.ClipData.newPlainText("Resumen",document).apply{description.extras=android.os.PersistableBundle().apply{putBoolean(android.content.ClipDescription.EXTRA_IS_SENSITIVE,true)}})
@@ -96,9 +97,6 @@ import androidx.compose.ui.unit.sp
                     }
                 }
                 StudyContent(section,s.copy(summary=SummaryQuality.display(s.summary),organization=s.organization.copy(sections=KnowledgeSummary.previousSections(s))),guide,lesson,{inspected=null;onQuestion(it)},{inspected=null;onEdit(it)},{text,source->inspected=null;onSave(text,source)})
-            }else if(inspected=="status"){
-                Text(issue,style=MaterialTheme.typography.bodyMedium)
-                TextButton(onClick={inspected=null;onRefresh()},enabled=canRefresh){Text("Reintentar")}
             }else if(inspected=="summary"){
                 if(map!=null){
                     ResearchedMapReading(map,s,onEdit={inspected=null;onEdit(it)})
@@ -212,11 +210,6 @@ import androidx.compose.ui.unit.sp
         }
         HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant)
     }
-}
-@Composable private fun SummaryFeedback(progress:String,issue:String){
-    val text=progress.ifBlank{issue}
-    if(text.isNotBlank())Text(text,modifier=Modifier.widthIn(max=340.dp).padding(horizontal=8.dp,vertical=4.dp),
-        style=MaterialTheme.typography.bodySmall,maxLines=3,overflow=androidx.compose.ui.text.style.TextOverflow.Ellipsis,color=if(progress.isNotBlank())VoiceAccent else MaterialTheme.colorScheme.onSurfaceVariant)
 }
 @Composable private fun StudySource(excerpt:StudyExcerpt,s:AssistantState,onEdit:(SpeechLine)->Unit){
     s.lines.firstOrNull{it.id==excerpt.sourceId}?.let{line->TextButton(onClick={onEdit(line)},contentPadding=PaddingValues(0.dp)){Text("Ver en el texto ↗",style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)}}

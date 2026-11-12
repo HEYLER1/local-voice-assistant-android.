@@ -2,7 +2,86 @@
 
 ![Logo de V](docs/assets/v-logo.svg)
 
-Asistente para estudiantes en Kotlin y Jetpack Compose: transcripción, respuestas locales u online, contexto de clase, carpetas, tareas, avisos de examen, historial en el dispositivo y escucha en segundo plano con botón flotante.
+Asistente para reuniones y estudiantes en Kotlin y Jetpack Compose: transcripción local, respuestas online con contexto, resúmenes, carpetas, historial y escucha en segundo plano.
+
+## Pruebas y métricas Android · 0.42
+
+Resumen de los informes Gradle conservados para esta revisión (12 de noviembre de 2026). Son resultados de las pruebas que ya se ejecutaron; no se volvieron a lanzar pruebas para preparar esta documentación.
+
+| Comprobación | Resultado registrado | Alcance |
+| --- | ---: | --- |
+| Pruebas unitarias | **105 aprobadas · 0 fallidas · 0 omitidas** (100 %) | 20 suites de lógica, preguntas, memoria, resúmenes, organización, estado de voz, enrutamiento y componentes de interfaz. Duración Gradle: 1,13 s. |
+| Prueba instrumentada en emulador | **1 aprobada · 0 fallidas · 0 omitidas** (100 %) | Emulador Pixel 9 Pro: una pregunta repartida entre fragmentos produce una sola respuesta contextual sin esperar a la red. Duración: 0,06 s. Usa el motor de prueba, no un proveedor real. |
+| APK de depuración 0.42 | **75.601.493 bytes · 72,10 MiB** | APK local compilado. No es una compilación firmada para Play Store. |
+
+En los informes actuales hay **106 casos de prueba ejecutados y 0 fallos**. El porcentaje describe únicamente esos casos; no es una medida de precisión de transcripción ni de calidad general de respuestas.
+
+Los recuentos de versiones anteriores que aparecen en el historial de este README son cortes de otras ejecuciones y reutilizan muchas de las mismas pruebas; no se suman a estos 106 casos.
+
+![Resultados de las pruebas Android guardadas para 0.42: 105 pruebas unitarias y una instrumentada aprobadas](docs/assets/android-test-results.svg)
+
+### Cobertura de las 105 pruebas unitarias
+
+| Área | Suites incluidas | Casos |
+| --- | --- | ---: |
+| Preguntas y voz | Detección de preguntas, auditoría de transcripción, menciones numéricas, estado de voz y disponibilidad del reconocedor | 22 |
+| Conversaciones y organización | Reglas, nombres, organizador de temas y memoria de clase | 36 |
+| Resumen y respuestas | Calidad de análisis, resumen y guía de estudio, preparación del resumen, legibilidad y fuentes | 28 |
+| Enrutamiento y métricas | Turnos entre proveedores y cálculos de métricas | 10 |
+| Interfaz flotante | Acoplamiento y panel de preguntas | 9 |
+| **Total unitario** | **20 suites** | **105** |
+
+### Tamaño del APK
+
+Los tamaños se calcularon directamente desde los APK locales guardados en `android/dist`; MiB significa 1.048.576 bytes. Entre 0.40 y 0.42 el APK baja **44,4 %**. La mayor parte de la reducción ocurrió en 0.41, al quitar del paquete los motores Soniqo y Moonshine. En 0.42 se mantiene esa reducción y se ahorra cerca de 1,0 MiB adicional frente a 0.41.
+
+![Comparación del tamaño de los APK Android y bibliotecas nativas en las versiones 0.40, 0.41 y 0.42](docs/assets/android-apk-size.svg)
+
+| Versión | APK | Bibliotecas nativas dentro del APK |
+| --- | ---: | ---: |
+| 0.40 | 129,65 MiB | 72,17 MiB · 10 archivos |
+| 0.41 | 73,11 MiB | 21,15 MiB · 3 archivos |
+| 0.42 | 72,10 MiB | 21,15 MiB · 3 archivos |
+
+La disminución de bibliotecas nativas de 0.40 a 0.42 es **70,7 %**. El tamaño instalado puede diferir porque Android descomprime recursos y guarda datos adicionales. El desglose por artefacto está en [`validation-0.42.json`](docs/validation-0.42.json).
+
+### Consultas online de prueba
+
+El 31 de octubre se hicieron seis consultas de texto ficticio a Pollinations desde el emulador con conexión de red: tres perfiles de respuesta, dos ejecuciones por perfil, en orden alternado. Las seis terminaron, pero la demora varió mucho. El primer texto apareció entre **7,41 y 45,83 s**; la mediana agrupada fue **40,19 s** y el promedio **33,34 s**. Cada perfil solo tiene dos muestras, por lo que no se puede concluir que uno sea más rápido ni estimar un p95 fiable.
+
+![Primer texto de las seis consultas ficticias a Pollinations; cada perfil tiene dos muestras](docs/assets/android-online-latency.svg)
+
+| Perfil | Consultas completadas | Mediana del primer texto |
+| --- | ---: | ---: |
+| Base | 2/2 | 26,62 s |
+| Compacto | 2/2 | 32,72 s |
+| Corto | 2/2 | 40,66 s |
+
+Una comprobación separada de reutilización de conexión tardó **18,61 s** en preparar HTTPS; después, el primer texto de una respuesta aritmética de un token llegó en **3,37 s**. La preparación se adelantó mientras la app estaba iniciando la escucha: no se eliminó ese costo ni representa una pregunta real compleja. AI Horde devolvió HTTP 403 en esa sesión y Pollinations rechazó una solicitud sin razonamiento con HTTP 400; el perfil de razonamiento bajo sí respondió. Los proveedores gratuitos pueden limitar el acceso o cambiar su latencia.
+
+Los informes anteriores también registran resúmenes estructurados de Pollinations con texto astronómico ficticio. En dos ejecuciones separadas la generación tardó **13,25 s** y **50,32 s**; son ejemplos de disponibilidad, no una muestra suficiente para afirmar un tiempo típico. No se enviaron transcripciones personales.
+
+### Límites de esta validación
+
+- Los casos unitarios y la prueba instrumentada verifican reglas y estados con datos de prueba; no demuestran exactitud factual ni calidad acústica.
+- Las pruebas de red enviaron texto fijo, no audio en vivo. La demora medida empieza en la consulta online, no cuando comienza a hablar una persona.
+- No hay una comparación de audio idéntico con Transcripción instantánea de Google, ni una prueba de clase larga en un A54 físico dentro de esta revisión.
+- El flujo real de Google/Firebase y la sincronización de Firestore no están certificados por estos reportes. Se necesitan pruebas separadas con la configuración del proyecto, una cuenta de prueba y reglas publicadas.
+- La latencia de Pollinations y AI Horde depende de su disponibilidad, tráfico y límites; las mediciones históricas no garantizan la próxima respuesta.
+
+Fuentes de los datos: [informe de validación 0.42](docs/validation-0.42.json), [experimento de latencia y proxy](docs/answer-latency-proxy-experiment.json), [prueba de resumen estructurado](docs/structured-summary-fix-verification.json) y [prueba de límite de salida](docs/output-limit-fix-verification.json).
+
+## Android 0.42 · lectura a pantalla completa
+
+Texto y Preguntas ahora usan toda la pantalla para desplazarse por debajo de la barra superior y el micrófono, sin quedar encerrados en un área recortada. Resumen conserva su área protegida. Se retiraron Soniqo y Moonshine del APK y de la ruta de escucha: la transcripción queda exclusivamente en el reconocimiento local de Android. El laboratorio conserva Qwen3/LiteRT solo para métricas de respuestas.
+
+El APK de depuración de esta revisión pesa **72,10 MiB**; el paquete 0.40 anterior pesaba 129,65 MiB. Soniqo y Moonshine ya no se incluyen desde 0.41. Las bibliotecas nativas suman 21,15 MiB y corresponden principalmente a LiteRT-LM, que se conserva solo en el laboratorio de métricas de Qwen3. Los WAV se movieron a los recursos de prueba. La transcripción y las respuestas online no dependen de esos motores. Consulta la tabla y el gráfico de [tamaño del APK](#tamaño-del-apk).
+
+APK: `dist/v-asistente-android-0.42.apk`.
+
+## Acceso con Google
+
+La app usa Credential Manager y Firebase Authentication para iniciar sesión. El historial local se separa por UID y se sincroniza con Cloud Firestore al configurar la base de datos y publicar las reglas. Consulta [configuración de Google Auth](docs/GOOGLE_AUTH.md) y [sincronización con Firestore](docs/FIRESTORE_SYNC.md). `google-services.json` es local y está excluido de Git. Se sincronizan conversaciones, textos y tareas guardados; el audio no se guarda.
 
 ## Validación del formato del resumen
 

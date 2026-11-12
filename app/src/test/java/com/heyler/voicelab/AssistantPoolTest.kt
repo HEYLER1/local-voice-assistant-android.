@@ -35,7 +35,19 @@ class AssistantPoolTest{
         val pool=AssistantPool()
         assertEquals(listOf("pollinations"),pool.order(true,"auto",true))
         assertEquals(listOf("pollinations","horde"),pool.order(false,"auto",false))
-        assertEquals(listOf("qwen3"),pool.order(false,"qwen3",true))
+        assertEquals(listOf("pollinations","horde"),pool.order(false,"qwen3",true))
+    }
+    @Test fun reservedSummarySkipsSoftSpacingButHonorsProviderCooldown(){
+        var now=0L;val pool=AssistantPool{now}
+        pool.throttle("pollinations",30_000)
+        assertNull(pool.tryAcquire(listOf("pollinations")))
+        pool.reserve("pollinations","summary")
+        val summary=pool.tryAcquire(listOf("pollinations"),"summary")!!
+        pool.release(summary)
+        pool.cooldown("pollinations",10_000)
+        assertNull(pool.tryAcquire(listOf("pollinations"),"summary"))
+        now=10_000
+        assertNotNull(pool.tryAcquire(listOf("pollinations"),"summary"))
     }
     @Test fun aRequestedSummaryReservesTheNextSlotWithoutInterruptingTheCurrentAnswer(){
         val pool=AssistantPool();val current=pool.tryAcquire(listOf("pollinations"))!!

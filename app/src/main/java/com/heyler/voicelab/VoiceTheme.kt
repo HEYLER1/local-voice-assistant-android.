@@ -1,6 +1,8 @@
 package com.heyler.voicelab
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.ui.input.pointer.pointerInput
@@ -111,6 +113,11 @@ private val VoiceColors=darkColorScheme(
         val w=size.width;val h=size.height;val stroke=Stroke(width=2.dp.toPx(),cap=StrokeCap.Round)
         when(kind){
             "menu"->{drawLine(color,Offset(w*.16f,h*.3f),Offset(w*.84f,h*.3f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round);drawLine(color,Offset(w*.16f,h*.66f),Offset(w*.61f,h*.66f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round)}
+            "wave"->{for(i in 0..4){val x=w*(.2f+i*.15f);val half=h*listOf(.2f,.34f,.46f,.32f,.18f)[i];drawLine(color,Offset(x,h/2-half),Offset(x,h/2+half),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round)}}
+            "phone"->{drawRoundRect(color,Offset(w*.24f,h*.08f),Size(w*.52f,h*.84f),androidx.compose.ui.geometry.CornerRadius(w*.1f),style=stroke);drawLine(color,Offset(w*.4f,h*.2f),Offset(w*.6f,h*.2f),strokeWidth=1.7.dp.toPx(),cap=StrokeCap.Round);drawCircle(color,1.2.dp.toPx(),Offset(w*.5f,h*.8f))}
+            "language"->{drawCircle(color,w*.38f,Offset(w*.5f,h*.5f),style=stroke);drawOval(color,Offset(w*.31f,h*.12f),Size(w*.38f,h*.76f),style=stroke);drawLine(color,Offset(w*.14f,h*.5f),Offset(w*.86f,h*.5f),strokeWidth=1.5.dp.toPx(),cap=StrokeCap.Round);drawArc(color,0f,180f,false,Offset(w*.19f,h*.29f),Size(w*.62f,h*.42f),style=Stroke(width=1.3.dp.toPx()));drawArc(color,180f,180f,false,Offset(w*.19f,h*.29f),Size(w*.62f,h*.42f),style=Stroke(width=1.3.dp.toPx()))}
+            "folder"->{val path=androidx.compose.ui.graphics.Path().apply{moveTo(w*.1f,h*.27f);lineTo(w*.42f,h*.27f);lineTo(w*.53f,h*.4f);lineTo(w*.9f,h*.4f);lineTo(w*.86f,h*.78f);quadraticTo(w*.85f,h*.87f,w*.75f,h*.87f);lineTo(w*.2f,h*.87f);quadraticTo(w*.1f,h*.87f,w*.11f,h*.76f);close()};drawPath(path,color,style=stroke);drawLine(color,Offset(w*.12f,h*.3f),Offset(w*.12f,h*.2f),strokeWidth=stroke.width,cap=StrokeCap.Round);drawLine(color,Offset(w*.12f,h*.2f),Offset(w*.39f,h*.2f),strokeWidth=stroke.width,cap=StrokeCap.Round)}
+            "account"->{drawCircle(color,w*.17f,Offset(w*.5f,h*.3f),style=stroke);drawArc(color,200f,140f,false,Offset(w*.17f,h*.32f),Size(w*.66f,h*.58f),style=stroke)}
             "chevron"->{drawLine(color,Offset(w*.2f,h*.35f),Offset(w*.5f,h*.65f),strokeWidth=1.5.dp.toPx(),cap=StrokeCap.Round);drawLine(color,Offset(w*.5f,h*.65f),Offset(w*.8f,h*.35f),strokeWidth=1.5.dp.toPx(),cap=StrokeCap.Round)}
             "new-chat"->{drawRoundRect(color,Offset(w*.12f,h*.15f),Size(w*.66f,h*.65f),androidx.compose.ui.geometry.CornerRadius(w*.15f),style=stroke);drawLine(color,Offset(w*.49f,h*.55f),Offset(w*.86f,h*.18f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round);drawLine(color,Offset(w*.46f,h*.58f),Offset(w*.58f,h*.56f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round)}
             "send"->{drawLine(color,Offset(w*.5f,h*.82f),Offset(w*.5f,h*.2f),strokeWidth=2.3.dp.toPx(),cap=StrokeCap.Round);drawLine(color,Offset(w*.2f,h*.48f),Offset(w*.5f,h*.18f),strokeWidth=2.3.dp.toPx(),cap=StrokeCap.Round);drawLine(color,Offset(w*.5f,h*.18f),Offset(w*.8f,h*.48f),strokeWidth=2.3.dp.toPx(),cap=StrokeCap.Round)}
@@ -118,6 +125,7 @@ private val VoiceColors=darkColorScheme(
             "add"->{drawLine(color,Offset(w*.2f,h*.5f),Offset(w*.8f,h*.5f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round);drawLine(color,Offset(w*.5f,h*.2f),Offset(w*.5f,h*.8f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round)}
             "search"->{drawCircle(color,w*.27f,Offset(w*.42f,h*.42f),style=stroke);drawLine(color,Offset(w*.63f,h*.63f),Offset(w*.85f,h*.85f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round)}
             "chat"->{drawRoundRect(color,Offset(w*.12f,h*.15f),Size(w*.76f,h*.58f),androidx.compose.ui.geometry.CornerRadius(w*.14f),style=stroke);drawLine(color,Offset(w*.25f,h*.73f),Offset(w*.25f,h*.9f),strokeWidth=2.dp.toPx());drawLine(color,Offset(w*.25f,h*.9f),Offset(w*.45f,h*.73f),strokeWidth=2.dp.toPx())}
+            "chat-plus"->{drawRoundRect(color,Offset(w*.08f,h*.1f),Size(w*.68f,h*.58f),androidx.compose.ui.geometry.CornerRadius(w*.14f),style=stroke);drawLine(color,Offset(w*.22f,h*.68f),Offset(w*.22f,h*.86f),strokeWidth=2.dp.toPx());drawLine(color,Offset(w*.22f,h*.86f),Offset(w*.42f,h*.68f),strokeWidth=2.dp.toPx());drawLine(color,Offset(w*.76f,h*.72f),Offset(w*.96f,h*.72f),strokeWidth=2.2.dp.toPx(),cap=StrokeCap.Round);drawLine(color,Offset(w*.86f,h*.62f),Offset(w*.86f,h*.82f),strokeWidth=2.2.dp.toPx(),cap=StrokeCap.Round)}
             "check"->{drawLine(color,Offset(w*.18f,h*.52f),Offset(w*.4f,h*.74f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round);drawLine(color,Offset(w*.4f,h*.74f),Offset(w*.84f,h*.24f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round)}
             "minus"->{drawLine(color,Offset(w*.2f,h*.5f),Offset(w*.8f,h*.5f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round)}
             "notes"->{for(i in 0..2){val y=h*(.25f+i*.25f);drawCircle(color,1.dp.toPx(),Offset(w*.15f,y));drawLine(color,Offset(w*.35f,y),Offset(w*.85f,y),strokeWidth=1.6.dp.toPx(),cap=StrokeCap.Round)}}
@@ -130,6 +138,7 @@ private val VoiceColors=darkColorScheme(
             }
             "save"->{val path=androidx.compose.ui.graphics.Path().apply{moveTo(w*.25f,h*.13f);lineTo(w*.75f,h*.13f);lineTo(w*.75f,h*.88f);lineTo(w*.5f,h*.7f);lineTo(w*.25f,h*.88f);close()};drawPath(path,color,style=stroke)}
             "settings"->{drawCircle(color,w*.18f,Offset(w/2,h/2),style=stroke);for(i in 0 until 8){val angle=i*Math.PI/4;val x=kotlin.math.cos(angle).toFloat();val y=kotlin.math.sin(angle).toFloat();drawLine(color,Offset(w/2+x*w*.31f,h/2+y*h*.31f),Offset(w/2+x*w*.42f,h/2+y*h*.42f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round)}}
+            "logout"->{drawRoundRect(color,Offset(w*.12f,h*.12f),Size(w*.52f,h*.76f),androidx.compose.ui.geometry.CornerRadius(w*.06f),style=stroke);drawLine(color,Offset(w*.44f,h*.5f),Offset(w*.89f,h*.5f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round);drawLine(color,Offset(w*.7f,h*.3f),Offset(w*.9f,h*.5f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round);drawLine(color,Offset(w*.9f,h*.5f),Offset(w*.7f,h*.7f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round)}
             "spark"->{val path=androidx.compose.ui.graphics.Path().apply{moveTo(w*.5f,h*.08f);lineTo(w*.62f,h*.38f);lineTo(w*.92f,h*.5f);lineTo(w*.62f,h*.62f);lineTo(w*.5f,h*.92f);lineTo(w*.38f,h*.62f);lineTo(w*.08f,h*.5f);lineTo(w*.38f,h*.38f);close()};drawPath(path,color,style=stroke)}
             "pause"->{drawRoundRect(color,Offset(w*.24f,h*.18f),Size(w*.18f,h*.64f),androidx.compose.ui.geometry.CornerRadius(w*.07f));drawRoundRect(color,Offset(w*.58f,h*.18f),Size(w*.18f,h*.64f),androidx.compose.ui.geometry.CornerRadius(w*.07f))}
             else->{drawRoundRect(color,Offset(w*.36f,h*.08f),Size(w*.28f,h*.5f),androidx.compose.ui.geometry.CornerRadius(w*.14f));drawArc(color,0f,180f,false,Offset(w*.2f,h*.24f),Size(w*.6f,h*.46f),style=stroke);drawLine(color,Offset(w*.5f,h*.7f),Offset(w*.5f,h*.88f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round);drawLine(color,Offset(w*.35f,h*.9f),Offset(w*.65f,h*.9f),strokeWidth=2.dp.toPx(),cap=StrokeCap.Round)}
@@ -165,6 +174,8 @@ private val VoiceColors=darkColorScheme(
     val focus=LocalFocusManager.current
     val idleFocus=remember{FocusRequester()}
     var fieldFocused by remember{mutableStateOf(false)}
+    val animatedLevel by animateFloatAsState(if(listening)level.coerceIn(0f,1f)else 0f,animationSpec=tween(140),label="mic-level")
+    val micFill by animateColorAsState(if(listening)VoiceGreen else Color(0xFFF2F1F7),animationSpec=tween(220),label="mic-state")
     LaunchedEffect(fieldFocused){if(fieldFocused){withFrameNanos{};keyboard?.show()}}
     val send={if(enabled&&text.isNotBlank()){focus.clearFocus(force=true);idleFocus.requestFocus();keyboard?.hide();onSend()}}
     Column(Modifier.fillMaxWidth().focusRequester(idleFocus).focusable().navigationBarsPadding().imePadding().padding(horizontal=16.dp,vertical=8.dp)){
@@ -172,8 +183,10 @@ private val VoiceColors=darkColorScheme(
             Row(Modifier.padding(horizontal=8.dp,vertical=4.dp),verticalAlignment=Alignment.CenterVertically){
                 TextField(value=text,onValueChange=onText,enabled=enabled,placeholder={Text("Escribe o habla con V")},modifier=Modifier.weight(1f).onFocusChanged{fieldFocused=it.isFocused}.pointerInput(enabled,keyboard){awaitPointerEventScope{while(true){val event=awaitPointerEvent(PointerEventPass.Final);if(enabled&&event.changes.any{it.previousPressed&&!it.pressed})keyboard?.show()}}}.semantics{contentDescription="Mensaje para V"},maxLines=4,shape=RoundedCornerShape(24.dp),colors=TextFieldDefaults.colors(focusedContainerColor=Color.Transparent,unfocusedContainerColor=Color.Transparent,disabledContainerColor=Color.Transparent,focusedIndicatorColor=Color.Transparent,unfocusedIndicatorColor=Color.Transparent),keyboardOptions=KeyboardOptions(imeAction=ImeAction.Send),keyboardActions=KeyboardActions(onSend={send()}))
                 if(text.isNotBlank())IconButton(onClick={send()},enabled=enabled,modifier=Modifier.semantics{contentDescription="Enviar mensaje"}){VoiceGlyph("send",VoiceAccent,Modifier.size(22.dp))}
-                Surface(onClick={focus.clearFocus(force=true);idleFocus.requestFocus();keyboard?.hide();onVoice()},enabled=enabled,color=if(listening)VoiceGreen else Color(0xFFF2F1F7),shape=CircleShape,modifier=Modifier.size(48.dp).semantics{contentDescription=if(starting)"Cancelar preparación"else if(listening)"Pausar escucha"else "Iniciar escucha";role=Role.Button}){
-                    Box(contentAlignment=Alignment.Center){VoiceGlyph(if(listening)"pause"else "mic",Color(0xFF171921),Modifier.size(23.dp))}
+                Box(Modifier.size(54.dp).border((1+animatedLevel*2.4f).dp,if(listening)VoiceGreen.copy(alpha=.45f+.4f*animatedLevel)else MaterialTheme.colorScheme.outlineVariant,CircleShape).padding(3.dp),contentAlignment=Alignment.Center){
+                    Surface(onClick={focus.clearFocus(force=true);idleFocus.requestFocus();keyboard?.hide();onVoice()},enabled=enabled,color=micFill,shape=CircleShape,modifier=Modifier.fillMaxSize().semantics{contentDescription=if(starting)"Cancelar preparación"else if(listening)"Pausar escucha"else "Iniciar escucha";role=Role.Button}){
+                        Box(contentAlignment=Alignment.Center){VoiceGlyph(if(listening)"pause"else "mic",Color(0xFF171921),Modifier.size(23.dp))}
+                    }
                 }
             }
         }

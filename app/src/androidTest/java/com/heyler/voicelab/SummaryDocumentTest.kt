@@ -47,7 +47,7 @@ class SummaryDocumentTest {
         rule.onAllNodesWithText(organized.summary).onLast().assertIsDisplayed()
         rule.onAllNodesWithText("Criterios de calidad").onLast().performScrollTo().assertIsDisplayed()
     }
-    @Test fun summaryRequestShowsInsufficientTextAndWaitingInline(){
+    @Test fun summaryRequestShowsInsufficientTextAndQuietProgress(){
         val live=mutableStateOf(AssistantState(lines=listOf(SpeechLine(1,"Hola, buenos días.",true))))
         val issue="Todavía no hay información suficiente."
         rule.runOnUiThread{rule.activity.setContent{VoiceTheme{Surface(color=VoiceBackground){
@@ -57,7 +57,8 @@ class SummaryDocumentTest {
         rule.onNodeWithText(issue).assertIsDisplayed()
         rule.runOnIdle{live.value=live.value.copy(summaryPending=true,summaryError="",summaryStatus="Esperando a que termine la consulta de Pollinations…")}
         rule.onNodeWithContentDescription("Generar resumen").assertIsNotEnabled()
-        rule.onNodeWithText("Esperando a que termine la consulta de Pollinations…").assertIsDisplayed()
+        rule.onNodeWithText("Esperando a que termine la consulta de Pollinations…").assertDoesNotExist()
+        rule.onNodeWithText("Generando resumen").assertDoesNotExist()
     }
     @Test fun rawParserErrorIsHiddenAndTheNoticeDoesNotOverlapTheMap(){
         val raw="Expected ':' after previous:[]} at character 2758 of {\"summary\":\"Contenido ficticio\"}".repeat(8)
@@ -69,8 +70,8 @@ class SummaryDocumentTest {
         val root=rule.onNodeWithContentDescription("Abrir síntesis del resumen").fetchSemanticsNode().boundsInRoot
         assertTrue(notice.fetchSemanticsNode().boundsInRoot.bottom<=root.top)
         capture("v-safe-summary-error-synthetic.png")
-        rule.onNodeWithContentDescription("Ver aviso del resumen").performClick()
         rule.onAllNodes(hasText("Expected",substring=true)).assertCountEquals(0)
+        rule.onNodeWithContentDescription("Ver aviso del resumen").assertDoesNotExist()
     }
     private fun capture(name:String){
         rule.waitForIdle()

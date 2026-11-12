@@ -1,7 +1,5 @@
 package com.heyler.voicelab
 
-import android.Manifest
-import android.content.pm.PackageManager
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -18,13 +16,10 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 class LabActivity:ComponentActivity(){
     private lateinit var lab:LabViewModel
-    private val speechImport=registerForActivityResult(ActivityResultContracts.OpenDocument()){uri->uri?.let{lab.importModel(it,true)}}
-    private val languageImport=registerForActivityResult(ActivityResultContracts.OpenDocument()){uri->uri?.let{lab.importModel(it,false)}}
-    private val permission=registerForActivityResult(ActivityResultContracts.RequestPermission()){allowed->if(allowed)lab.microphone()}
+    private val languageImport=registerForActivityResult(ActivityResultContracts.OpenDocument()){uri->uri?.let{lab.importModel(it)}}
     private val export=registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")){uri->
         uri?.let{lifecycleScope.launch(Dispatchers.IO){val report=lab.exportReport();contentResolver.openOutputStream(it)?.use{output->output.write(report.toByteArray())}}}
     }
@@ -36,26 +31,19 @@ class LabActivity:ComponentActivity(){
             Surface(modifier=Modifier.fillMaxSize()){
                 Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(20.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)){
                     Text("V · Laboratorio Android",style=MaterialTheme.typography.headlineSmall)
-                    Text("Kotlin nativo · CPU · sin conexión al Mac",style=MaterialTheme.typography.titleMedium)
-                    Text("Prueba en el A54 real. Un emulador verifica funcionamiento, no rapidez, batería ni temperatura del teléfono.")
+                    Text("Pruebas locales de Qwen3 · CPU",style=MaterialTheme.typography.titleMedium)
+                    Text("El emulador verifica funcionamiento, no la rapidez ni el consumo de un teléfono real.")
                     Text(state.models);Text(state.status,color=MaterialTheme.colorScheme.primary)
                     Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
-                        OutlinedButton(onClick={speechImport.launch(arrayOf("application/zip","application/octet-stream"))},enabled=!state.busy){Text("Importar voz ZIP")}
-                        OutlinedButton(onClick={languageImport.launch(arrayOf("*/*"))},enabled=!state.busy){Text("Importar LLM")}
+                        OutlinedButton(onClick={languageImport.launch(arrayOf("*/*"))},enabled=!state.busy){Text("Importar Qwen3")}
                     }
-                    Text("Motores por separado y comparación",style=MaterialTheme.typography.titleLarge)
+                    Text("Medición del modelo de respuestas",style=MaterialTheme.typography.titleLarge)
                     Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
-                        Button(onClick={lab.benchmark("asr")},enabled=!state.busy){Text("Voz sola")}
-                        Button(onClick={lab.benchmark("llm")},enabled=!state.busy){Text("LLM solo")}
-                    }
-                    Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
-                        Button(onClick={lab.benchmark("combined")},enabled=!state.busy){Text("Integrados")}
-                        OutlinedButton(onClick={lab.benchmark("combined",true)},enabled=!state.busy){Text("20 minutos")}
+                        Button(onClick={lab.benchmark()},enabled=!state.busy){Text("Medir")}
+                        OutlinedButton(onClick={lab.benchmark(true)},enabled=!state.busy){Text("20 minutos")}
                     }
                     Button(onClick={lab.stop()},enabled=state.busy){Text("Detener")}
-                    Text("Audio y preguntas manuales",style=MaterialTheme.typography.titleLarge)
-                    OutlinedButton(onClick={if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED)lab.microphone()else permission.launch(Manifest.permission.RECORD_AUDIO)},enabled=!state.busy){Text("Escuchar micrófono")}
-                    if(state.transcript.isNotBlank())Text(state.transcript)
+                    Text("Pregunta de prueba",style=MaterialTheme.typography.titleLarge)
                     OutlinedTextField(question,{question=it},label={Text("Pregunta de prueba")},modifier=Modifier.fillMaxWidth(),enabled=!state.busy)
                     Button(onClick={lab.answer(question)},enabled=!state.busy&&question.isNotBlank()){Text("Responder localmente")}
                     if(state.answer.isNotBlank())Text(state.answer)
@@ -65,10 +53,9 @@ class LabActivity:ComponentActivity(){
                         OutlinedButton(onClick={export.launch("v-android-metricas.json")},enabled=!state.busy){Text("Exportar métricas")}
                         OutlinedButton(onClick={lab.clear()},enabled=!state.busy){Text("Borrar resultados")}
                     }
-                    Text("Audio del micrófono y consultas manuales: solo en memoria. Sin permiso de Internet. Importa modelos descargados previamente. Temperatura = sensor de batería, no temperatura del procesador.",style=MaterialTheme.typography.bodySmall)
+                    Text("Sin conexión a Internet. Importa un modelo descargado previamente. Temperatura medida mediante el sensor de batería.",style=MaterialTheme.typography.bodySmall)
                 }
             }
         }}
     }
-    override fun onStop(){lab.stop();super.onStop()}
 }

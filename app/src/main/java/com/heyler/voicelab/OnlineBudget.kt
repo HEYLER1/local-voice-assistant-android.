@@ -11,6 +11,6 @@ internal object OnlineBudget {
     fun retryMillis(header:String?,nowMillis:Long=System.currentTimeMillis()):Long{
         val seconds=header?.trim()?.toLongOrNull()
         val value=if(seconds!=null)seconds.coerceIn(0,86400)*1000 else runCatching{ZonedDateTime.parse(header,DateTimeFormatter.RFC_1123_DATE_TIME).toInstant().toEpochMilli()-nowMillis}.getOrDefault(60_000L)
-        return value.coerceIn(INTERVAL,86_400_000L)
+        return value.coerceIn(1_000L,86_400_000L)
     }
 }

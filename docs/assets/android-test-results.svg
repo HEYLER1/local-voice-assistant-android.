@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="270" viewBox="0 0 900 270" role="img" aria-labelledby="title desc">
+  <title id="title">Resultados de las pruebas Android 0.42</title>
+  <desc id="desc">105 pruebas unitarias y una prueba instrumentada aprobadas; cero fallos en los informes consultados.</desc>
+  <rect width="900" height="270" rx="24" fill="#111522"/>
+  <text x="40" y="52" fill="#f5f2ff" font-family="Arial,sans-serif" font-size="25" font-weight="700">Pruebas Android · 0.42</text>
+  <text x="40" y="82" fill="#aeb5c7" font-family="Arial,sans-serif" font-size="15">Informes locales guardados · 12 nov 2026</text>
+  <text x="40" y="130" fill="#e8e5f4" font-family="Arial,sans-serif" font-size="18">Unitarias</text>
+  <rect x="195" y="108" width="560" height="30" rx="15" fill="#292e3e"/>
+  <rect x="195" y="108" width="560" height="30" rx="15" fill="#31c5aa"/>
+  <text x="780" y="130" fill="#f5f2ff" font-family="Arial,sans-serif" font-size="18" font-weight="700">105 / 105</text>
+  <text x="40" y="188" fill="#e8e5f4" font-family="Arial,sans-serif" font-size="18">Emulador</text>
+  <rect x="195" y="166" width="560" height="30" rx="15" fill="#292e3e"/>
+  <rect x="195" y="166" width="560" height="30" rx="15" fill="#31c5aa"/>
+  <text x="780" y="188" fill="#f5f2ff" font-family="Arial,sans-serif" font-size="18" font-weight="700">1 / 1</text>
+  <circle cx="55" cy="232" r="7" fill="#31c5aa"/>
+  <text x="72" y="238" fill="#aeb5c7" font-family="Arial,sans-serif" font-size="15">0 fallos · 0 omitidas · 100 % de aprobación en estos reportes</text>
+</svg>

@@ -12,8 +12,8 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -22,26 +22,24 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
-import java.util.Locale
+import kotlinx.coroutines.CancellationException
 
 class MainActivity:ComponentActivity(){
     internal lateinit var assistant:AssistantViewModel
         private set
+    private lateinit var googleAuth:GoogleAuthRepository
     private var requestedAnswerId by mutableStateOf<String?>(null)
     private var tts:TextToSpeech?=null
     private var localVoiceReady=false
     private var videoRequestPending=false
-    private val speechImport=registerForActivityResult(ActivityResultContracts.OpenDocument()){uri->uri?.let{assistant.importModel(it,true)}}
-    private val soniqoImport=registerForActivityResult(ActivityResultContracts.OpenDocument()){uri->uri?.let{assistant.importSoniqo(it)}}
-    private val languageImport=registerForActivityResult(ActivityResultContracts.OpenDocument()){uri->uri?.let{assistant.importModel(it,false)}}
     private val permission=registerForActivityResult(ActivityResultContracts.RequestPermission()){allowed->if(allowed)requestListening()else assistant.state.value=assistant.state.value.copy(status="Permiso de micrófono no concedido.")}
     private val videoConsent=registerForActivityResult(ActivityResultContracts.StartActivityForResult()){result->
         videoRequestPending=false
@@ -68,29 +66,54 @@ class MainActivity:ComponentActivity(){
         else runCatching{overlayPermission.launch(Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,android.net.Uri.parse("package:$packageName")))}.onFailure{assistant.state.value=assistant.state.value.copy(status="No se pudo abrir el permiso de mostrar sobre otras aplicaciones.")}
     }
     override fun onCreate(savedInstanceState:Bundle?){
-        super.onCreate(savedInstanceState);enableEdgeToEdge(statusBarStyle=SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),navigationBarStyle=SystemBarStyle.dark(android.graphics.Color.TRANSPARENT));assistant=(application as AssistantApplication).assistant;assistant.restoreConversation()
+        super.onCreate(savedInstanceState);enableEdgeToEdge(statusBarStyle=SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),navigationBarStyle=SystemBarStyle.dark(android.graphics.Color.TRANSPARENT));assistant=(application as AssistantApplication).assistant;googleAuth=GoogleAuthRepository(this)
         tts=TextToSpeech(this){status->if(status==TextToSpeech.SUCCESS){val voice=tts?.voices?.firstOrNull{it.locale.language=="es"&&!it.isNetworkConnectionRequired};if(voice!=null){tts?.voice=voice;localVoiceReady=true}}}
         requestedAnswerId=intent?.getStringExtra(FLOATING_ANSWER_ID)
-        setContent{VoiceTheme{AssistantScreen(assistant,
-            listen={tts?.stop();if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED)requestListening()else permission.launch(Manifest.permission.RECORD_AUDIO)},
-            importSpeech={speechImport.launch(arrayOf("application/zip","application/octet-stream"))},importLanguage={languageImport.launch(arrayOf("*/*"))},
-            diagnostics={assistant.releaseModels{startActivity(Intent(this,LabActivity::class.java))}},
-            speak={text->if(localVoiceReady){assistant.pause();tts?.speak(text,TextToSpeech.QUEUE_FLUSH,null,"local-answer")}else assistant.state.value=assistant.state.value.copy(status="Instala una voz española sin conexión en los ajustes de Android para escuchar respuestas.")},
-            stopVoice={tts?.stop()},importSoniqo={soniqoImport.launch(arrayOf("application/zip","application/octet-stream"))},floatingControl=::floatingControl,requestedAnswerId=requestedAnswerId,onAnswerRequestHandled={requestedAnswerId=null})
-            val s by assistant.state.collectAsState()
-            DisposableEffect(s.listening||s.generating){if(s.listening||s.generating)window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);onDispose{}}
+        setContent{VoiceTheme{
+            val auth by googleAuth.state.collectAsState()
+            val scope=rememberCoroutineScope()
+            var signingIn by remember{mutableStateOf(false)}
+            var signInError by remember{mutableStateOf("")}
+            var restoredUid by remember{mutableStateOf<String?>(null)}
+            var legacyPrompt by remember{mutableStateOf(false)}
+            when(val current=auth){
+                GoogleAuthState.ConfigurationRequired->GoogleSignInScreen(configured=false,busy=false,error=""){ }
+                GoogleAuthState.SignedOut->GoogleSignInScreen(configured=true,busy=signingIn,error=signInError){entry->
+                    scope.launch{
+                        signingIn=true
+                        try{googleAuth.signIn(this@MainActivity,entry);signInError=""}
+                        catch(error:CancellationException){signInError=""}
+                        catch(error:Throwable){signInError=googleAuth.message(error)}
+                        finally{signingIn=false}
+                    }
+                }
+                is GoogleAuthState.SignedIn->{
+                    LaunchedEffect(current.account.uid){restoredUid=null;legacyPrompt=assistant.restoreConversation(current.account.uid);restoredUid=current.account.uid}
+                    if(restoredUid!=current.account.uid)Box(Modifier.fillMaxSize().systemBarsPadding(),contentAlignment=androidx.compose.ui.Alignment.Center){CircularProgressIndicator(color=VoiceAccent)}
+                    else{
+                        val s by assistant.state.collectAsState()
+                        AssistantScreen(assistant,
+                            listen={tts?.stop();if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED)requestListening()else permission.launch(Manifest.permission.RECORD_AUDIO)},
+                            speak={text->if(localVoiceReady){assistant.pause();tts?.speak(text,TextToSpeech.QUEUE_FLUSH,null,"local-answer")}else assistant.state.value=assistant.state.value.copy(status="Instala una voz española sin conexión en los ajustes de Android para escuchar respuestas.")},
+                            stopVoice={tts?.stop()},floatingControl=::floatingControl,requestedAnswerId=requestedAnswerId,onAnswerRequestHandled={requestedAnswerId=null},account=current.account,
+                            onSignOut={scope.launch{assistant.deactivateAccount();googleAuth.signOut()}},onImportLegacy=assistant::importLegacyData)
+                        DisposableEffect(s.listening||s.generating){if(s.listening||s.generating)window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);onDispose{}}
+                        if(legacyPrompt&&s.legacyDataAvailable)AlertDialog(onDismissRequest={assistant.dismissLegacyImportPrompt();legacyPrompt=false},title={Text("Conversaciones anteriores")},text={Text("Encontré conversaciones y textos guardados antes de iniciar sesión. Puedes asociarlos a esta cuenta; se sincronizarán cuando Firestore esté configurado.")},confirmButton={TextButton(onClick={assistant.importLegacyData();legacyPrompt=false}){Text("Asociar a esta cuenta")}},dismissButton={TextButton(onClick={assistant.dismissLegacyImportPrompt();legacyPrompt=false}){Text("Dejar aparte")}})
+                    }
+                }
+            }
         }}
     }
     override fun onNewIntent(intent:Intent){super.onNewIntent(intent);setIntent(intent);requestedAnswerId=intent.getStringExtra(FLOATING_ANSWER_ID)}
     companion object{internal const val FLOATING_ANSWER_ID="floating-answer-id"}
     override fun onStart(){super.onStart();assistant.resumeForeground()}
     override fun onStop(){if(!isChangingConfigurations)assistant.background();tts?.stop();super.onStop()}
-    override fun onDestroy(){tts?.shutdown();super.onDestroy()}
+    override fun onDestroy(){if(::googleAuth.isInitialized)googleAuth.close();tts?.shutdown();super.onDestroy()}
 }
 
 private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val text:String="",val scope:String="",val due:String="",val source:String="Texto escrito por usuario")
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable internal fun AssistantScreen(vm:AssistantViewModel,listen:()->Unit,importSpeech:()->Unit,importLanguage:()->Unit,diagnostics:()->Unit,speak:(String)->Unit,stopVoice:()->Unit,initialTab:Int=0,initialSection:Int=0,initialDrawer:Boolean=false,importSoniqo:()->Unit={},floatingControl:(Boolean)->Unit=vm::setFloatingControl,requestedAnswerId:String?=null,onAnswerRequestHandled:()->Unit={}){
+@Composable internal fun AssistantScreen(vm:AssistantViewModel,listen:()->Unit,speak:(String)->Unit,stopVoice:()->Unit,initialTab:Int=0,initialSection:Int=0,initialDrawer:Boolean=false,floatingControl:(Boolean)->Unit=vm::setFloatingControl,requestedAnswerId:String?=null,onAnswerRequestHandled:()->Unit={},account:GoogleAccountInfo?=null,onSignOut:()->Unit={},onImportLegacy:()->Unit={}){
     val s by vm.state.collectAsState()
     var liveSection by rememberSaveable{mutableIntStateOf(initialSection)}
     var tab by remember{mutableIntStateOf(initialTab)}
@@ -103,7 +126,6 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
     var librarySearching by rememberSaveable{mutableStateOf(false)}
     val librarySearchFocus=remember{FocusRequester()}
     val compact=LocalConfiguration.current.screenHeightDp<480
-    val appContext=androidx.compose.ui.platform.LocalContext.current
     val keyboard=LocalSoftwareKeyboardController.current
     val drawer=rememberDrawerState(if(initialDrawer)DrawerValue.Open else DrawerValue.Closed)
     val scope=rememberCoroutineScope()
@@ -113,19 +135,50 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
     var naming by remember{mutableStateOf(false)}
     var namingId by remember{mutableStateOf<Long?>(null)}
     var deletingId by remember{mutableStateOf<Long?>(null)}
-    var advancedSettings by rememberSaveable{mutableStateOf(false)}
     var choosingLanguage by remember{mutableStateOf(false)}
     var nameDraft by remember{mutableStateOf("")}
     var moving by remember{mutableStateOf<FolderMove?>(null)}
     var folderName by remember{mutableStateOf<String?>(null)}
     var folderEdit by remember{mutableStateOf<Long?>(null)}
     var folderDelete by remember{mutableStateOf<Long?>(null)}
-    var importingText by remember{mutableStateOf(false)}
-    var transcriptDraft by remember{mutableStateOf("")}
-    if(importingText)AlertDialog(onDismissRequest={importingText=false},title={Text("Añadir transcripción")},text={Column{
-        Text("El texto se conserva en este chat. Con el asistente activado, se analizará por bloques con el motor seleccionado para organizarlo y responder preguntas.",style=MaterialTheme.typography.bodySmall)
-        OutlinedTextField(transcriptDraft,{transcriptDraft=it.take(60000)},label={Text("Pega aquí tus apuntes o transcripción")},modifier=Modifier.fillMaxWidth().heightIn(min=160.dp,max=320.dp))
-    }},confirmButton={TextButton(onClick={vm.importTranscript(transcriptDraft);transcriptDraft="";importingText=false;tab=0;scope.launch{drawer.close()}},enabled=transcriptDraft.isNotBlank()){Text("Añadir al chat")}},dismissButton={TextButton(onClick={importingText=false}){Text("Cancelar")}})
+    var confirmSignOut by remember{mutableStateOf(false)}
+    var showAccountDetails by remember{mutableStateOf(false)}
+    val accountInitials=remember(account){
+        val words=account?.displayName.orEmpty().trim().split(Regex("\\s+")).filter{it.isNotBlank()}
+        when{words.size>=2->"${words.first().first()}${words.last().first()}";words.isNotEmpty()->words.first().take(2);else->account?.email.orEmpty().substringBefore('@').filter{it.isLetterOrDigit()}.take(2).ifBlank{"V"}}.uppercase()
+    }
+    if(confirmSignOut)GoogleSignOutDialog({confirmSignOut=false;onSignOut()},{confirmSignOut=false})
+    if(showAccountDetails){
+        val email=account?.email.orEmpty()
+        val handle=email.substringBefore('@').takeIf{it.isNotBlank()}?.let{"@$it"}?:"Cuenta local"
+        val displayName=account?.displayName?.ifBlank{"Usuario"}?:"Usuario"
+        val connected=account!=null
+        androidx.compose.ui.window.Dialog(onDismissRequest={showAccountDetails=false}){
+            Surface(modifier=Modifier.fillMaxWidth(),shape=RoundedCornerShape(28.dp),color=Color(0xFF1D2335),shadowElevation=18.dp){
+                Column(Modifier.padding(horizontal=22.dp,vertical=18.dp),verticalArrangement=Arrangement.spacedBy(20.dp),horizontalAlignment=androidx.compose.ui.Alignment.CenterHorizontally){
+                    Box(Modifier.fillMaxWidth()){
+                        IconButton(onClick={showAccountDetails=false},modifier=Modifier.align(androidx.compose.ui.Alignment.TopEnd).size(38.dp)){VoiceGlyph("close",Color(0xFF9BA4B7),Modifier.size(18.dp))}
+                        Column(Modifier.fillMaxWidth().padding(top=20.dp),horizontalAlignment=androidx.compose.ui.Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(12.dp)){
+                            Box(Modifier.size(92.dp).background(Color(0xFF965BB5),androidx.compose.foundation.shape.CircleShape),contentAlignment=androidx.compose.ui.Alignment.Center){
+                                Text(accountInitials,color=Color.White,style=MaterialTheme.typography.headlineMedium,fontWeight=androidx.compose.ui.text.font.FontWeight.Normal)
+                            }
+                            Text(displayName,style=MaterialTheme.typography.headlineSmall,fontWeight=androidx.compose.ui.text.font.FontWeight.Normal,color=Color(0xFFF3F2F9),textAlign=androidx.compose.ui.text.style.TextAlign.Center,maxLines=2)
+                            Text(handle,style=MaterialTheme.typography.bodyLarge,color=Color(0xFFA6AABD),textAlign=androidx.compose.ui.text.style.TextAlign.Center,maxLines=1)
+                        }
+                    }
+                    HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant)
+                    Column(horizontalAlignment=androidx.compose.ui.Alignment.CenterHorizontally,verticalArrangement=Arrangement.spacedBy(8.dp)){
+                        Row(Modifier.background(if(connected)VoiceGreen.copy(alpha=.12f)else Color(0xFF2A3040),RoundedCornerShape(50)).padding(horizontal=12.dp,vertical=7.dp),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){
+                            Box(Modifier.size(7.dp).background(if(connected)VoiceGreen else Color(0xFF9BA4B7),androidx.compose.foundation.shape.CircleShape))
+                            Spacer(Modifier.width(7.dp));Text(if(connected)"Cuenta conectada"else"Sin sesión",style=MaterialTheme.typography.labelMedium,color=if(connected)VoiceGreen else Color(0xFFB7BECC))
+                        }
+                        if(email.isNotBlank())Text(email,style=MaterialTheme.typography.bodyMedium,color=Color(0xFFCDD2DE),textAlign=androidx.compose.ui.text.style.TextAlign.Center,maxLines=2)
+                    }
+                    Button(onClick={showAccountDetails=false},modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=VoiceAccent,contentColor=Color(0xFF201337))){Text("Listo",fontWeight=androidx.compose.ui.text.font.FontWeight.Medium)}
+                }
+            }
+        }
+    }
     moving?.let{target->FolderPicker(s.folders,if(target.conversation==null)s.folderId else s.history.firstOrNull{it.id==target.conversation}?.folderId,{folder->vm.moveConversation(target.conversation,folder);moving=null},{folderEdit=null;folderName=""},{moving=null})}
     folderName?.let{initial->var name by remember(initial,folderEdit){mutableStateOf(initial)}
         AlertDialog(onDismissRequest={folderName=null},title={Text(if(folderEdit==null)"Nueva carpeta"else "Renombrar carpeta")},text={OutlinedTextField(name,{name=it.take(80)},singleLine=true,label={Text("Nombre")})},confirmButton={TextButton(onClick={
@@ -144,7 +197,7 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
         }}
     }},confirmButton={TextButton(onClick={choosingLanguage=false}){Text("Cerrar")}})
     ModalNavigationDrawer(drawerState=drawer,drawerContent={
-        ChatSidebar(s,tab,{scope.launch{drawer.close()}},{vm.newConversation();tab=0;liveSection=0;scope.launch{drawer.close()}},{id->vm.openConversation(id);tab=0;liveSection=0;scope.launch{drawer.close()}},{librarySection=1;tab=1;scope.launch{drawer.close()}},{tab=2;scope.launch{drawer.close()}},onRename={id,title->namingId=id;nameDraft=title;naming=true},onDelete={deletingId=it},onCreateFolder={folderEdit=null;folderName=""},onRenameFolder={id,name->folderEdit=id;folderName=name},onDeleteFolder={folderDelete=it},onMove={moving=FolderMove(it)},onNewInFolder={folder->vm.newConversation(folder);tab=0;liveSection=0;scope.launch{drawer.close()}})
+        ChatSidebar(s,tab,{scope.launch{drawer.close()}},{vm.newConversation();tab=0;liveSection=0;scope.launch{drawer.close()}},{id->vm.openConversation(id);tab=0;liveSection=0;scope.launch{drawer.close()}},{tab=2;scope.launch{drawer.close()}},onRename={id,title->namingId=id;nameDraft=title;naming=true},onDelete={deletingId=it},onCreateFolder={folderEdit=null;folderName=""},onRenameFolder={id,name->folderEdit=id;folderName=name},onDeleteFolder={folderDelete=it},onMove={moving=FolderMove(it)},onNewInFolder={folder->vm.newConversation(folder);tab=0;liveSection=0;scope.launch{drawer.close()}},account=account,onAccount={showAccountDetails=true},onSignOut={confirmSignOut=true},onPin=vm::setConversationPinned)
     }){
     Scaffold(containerColor=VoiceBackground,contentWindowInsets=if(tab==0)WindowInsets(0,0,0,0)else ScaffoldDefaults.contentWindowInsets,
         topBar={if(tab!=0)
@@ -161,7 +214,7 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
             0->ConversationStage(
                 header={ConversationTopBar(liveSection,{liveSection=it},{keyboard?.hide();scope.launch{drawer.open()}},{vm.newConversation();liveSection=0})},
                 composer={ChatVoiceComposer(s.listening,s.starting,s.audioLevel,!s.preparing,{if(s.listening||s.starting){if(s.listening)liveSection=2;vm.pause()}else {liveSection=0;listen()}},question,{question=it},{if(question.isNotBlank()&&!s.preparing){vm.ask(question.trim());sentAnswerId=vm.state.value.answers.lastOrNull()?.id;question="";liveSection=1;keyboard?.hide()}})}
-            ){readingInsets->key(s.conversationKey){LiveConversation(s,{editing=it},{text,source->draft=SaveDraft(kind=if(source.startsWith("Tarea de clase"))"Tarea"else "Recuerdo",text=text,source=source)},speak,vm::requestSummary,{vm.clearSession();stopVoice()},{vm.stopResponse();stopVoice()},{tab=2},Modifier.fillMaxSize().then(if(liveSection==0)Modifier else Modifier.padding(readingInsets)),liveSection,{liveSection=it},preferredAnswerId=sentAnswerId,transcriptPadding=if(liveSection==0)readingInsets else PaddingValues(0.dp),onResearch=vm::researchSummary)}}
+            ){readingInsets->key(s.conversationKey){LiveConversation(s,{editing=it},{text,source->draft=SaveDraft(kind=if(source.startsWith("Tarea de clase"))"Tarea"else "Recuerdo",text=text,source=source)},speak,vm::requestSummary,{vm.clearSession();stopVoice()},{vm.stopResponse();stopVoice()},{tab=2},Modifier.fillMaxSize(),liveSection,{liveSection=it},preferredAnswerId=sentAnswerId,transcriptPadding=readingInsets,onResearch=vm::researchSummary)}}
             else->Column(Modifier.fillMaxSize().padding(padding).imePadding().verticalScroll(rememberScrollState()).padding(horizontal=20.dp).padding(top=16.dp,bottom=28.dp),verticalArrangement=Arrangement.spacedBy(14.dp)){
                 when(tab){
                     1->{
@@ -177,7 +230,7 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
                         if(librarySection==0){
                         Button(onClick={vm.newConversation();liveSection=0;tab=0}){Text("Nueva conversación")}
                         s.history.filter{search.isBlank()||it.title.contains(search,true)}.forEach{entry->
-                            key(entry.id){ConversationHistoryRow(entry,false,false,{id->vm.openConversation(id);liveSection=0;tab=0},{id,title->namingId=id;nameDraft=title;naming=true},{moving=FolderMove(it)},{deletingId=it})}
+                            key(entry.id){ConversationHistoryRow(entry,false,false,{id->vm.openConversation(id);liveSection=0;tab=0},{id,title->namingId=id;nameDraft=title;naming=true},{moving=FolderMove(it)},{deletingId=it},onPin=vm::setConversationPinned)}
                         }
                         if(s.history.isEmpty())DesignPanel("Tu próxima conversación"){Text("Cuando empieces a escuchar, encontrarás aquí el historial.",color=MaterialTheme.colorScheme.onSurfaceVariant)}
                         }else{
@@ -203,86 +256,47 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
                     }
                     2->{
                         Text("Ajustes",style=MaterialTheme.typography.headlineSmall,fontWeight=androidx.compose.ui.text.font.FontWeight.SemiBold)
-                        DesignPanel("Escucha en segundo plano"){
-                            Toggle("Continuar al salir de la app",s.backgroundListening,vm::setBackgroundListening)
-                            Text("La escucha continúa al usar otras apps. Puedes detenerla desde la notificación.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                            Toggle("Botón flotante",s.floatingControl,floatingControl)
-                            Text("Mueve la burbuja al borde y desliza sus mensajes para ocultarlos.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                        SettingsSection("Escucha","phone"){
+                            SettingsToggle("phone","Continuar al salir","La transcripción sigue en segundo plano",s.backgroundListening,vm::setBackgroundListening)
+                            SettingsToggle("expand","Botón flotante","Acceso rápido sobre otras apps",s.floatingControl,floatingControl)
                         }
-                        DesignPanel("Asistente"){
-                            Toggle("Activar asistente",s.onlineAnswers,vm::setOnlineAnswers)
+                        SettingsSection("Preguntas","spark"){
+                            SettingsToggle("spark","Respuestas online","Usa Internet para responder",s.onlineAnswers,vm::setOnlineAnswers)
+                            SettingsToggle("mic","Detectar durante la escucha","Responder cuando aparezca una pregunta clara",s.autoAnswers,vm::setAnswers)
+                        }
+                        SettingsSection("Entrada de audio","wave"){
                             Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
-                                FilterChip(selected=s.answerEngine in setOf("auto","horde"),onClick={vm.setAnswerEngine("auto")},label={Text("Automático")})
-                                FilterChip(selected=s.answerEngine=="qwen3",onClick={vm.setAnswerEngine("qwen3")},label={Text("Todo local")})
+                                FilterChip(selected=s.audioSource=="mic",onClick={vm.setAudioSource("mic")},label={Text("Micrófono")},leadingIcon={VoiceGlyph("mic",if(s.audioSource=="mic")VoiceAccent else MaterialTheme.colorScheme.onSurfaceVariant,Modifier.size(18.dp))})
+                                FilterChip(selected=s.audioSource=="video",onClick={vm.setAudioSource("video")},label={Text("Teléfono")},leadingIcon={VoiceGlyph("phone",if(s.audioSource=="video")VoiceAccent else MaterialTheme.colorScheme.onSurfaceVariant,Modifier.size(18.dp))})
                             }
-                            Text(if(s.answerEngine=="qwen3")"Preguntas y resumen con tu modelo Qwen, sin Internet."else "Preguntas: un motor disponible. Resúmenes: Pollinations, solo al pulsar Generar resumen con suficiente texto confirmado.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(if(s.localModelAvailable)"Modelo local listo"else "Modelo local opcional, sin Internet",style=MaterialTheme.typography.bodySmall,color=if(s.localModelAvailable)VoiceGreen else VoiceAccent)
-                            OutlinedButton(onClick=importLanguage,enabled=!s.listening&&!s.starting&&!s.generating&&!s.preparing){Text(if(s.localModelAvailable)"Cambiar modelo local"else "Importar modelo local")}
-                            Text("Formato .litertlm compatible con Qwen. Las consultas online envían el contexto necesario a AI Horde o Pollinations; no necesitan registro.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        TextButton(onClick={advancedSettings=!advancedSettings}){Text(if(advancedSettings)"Ocultar más ajustes"else "Más ajustes")}
-                        if(advancedSettings){
-                        DesignPanel("Idiomas · Android local"){
-                            Text("Español se descarga automáticamente si está disponible. La primera descarga necesita conexión.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                        SettingsSection("Transcripción local","language"){
                             val models=s.localSpeechModels
                             val managing=models.downloading||models.checking
-                            TextButton(onClick={choosingLanguage=true},enabled=!managing&&!s.listening&&!s.starting,contentPadding=PaddingValues(0.dp)){
-                                Text(languageName(s.speechLanguage),modifier=Modifier.weight(1f),color=MaterialTheme.colorScheme.onSurface)
-                                Text("Cambiar",color=VoiceAccent)
-                            }
-                            Text(if(models.hasLanguage(s.speechLanguage))"Idioma listo sin conexión"else models.message,style=MaterialTheme.typography.bodySmall,color=if(models.hasLanguage(s.speechLanguage))VoiceGreen else MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(languageName(s.speechLanguage),style=MaterialTheme.typography.titleMedium,fontWeight=androidx.compose.ui.text.font.FontWeight.Medium)
+                            Text(if(models.hasLanguage(s.speechLanguage))"Disponible sin conexión"else models.message,style=MaterialTheme.typography.bodySmall,color=if(models.hasLanguage(s.speechLanguage))VoiceGreen else MaterialTheme.colorScheme.onSurfaceVariant)
                             if(models.downloading){if(models.progress!=null){LinearProgressIndicator(progress={models.progress/100f},modifier=Modifier.fillMaxWidth());Text("${models.progress} %",style=MaterialTheme.typography.labelSmall)}else LinearProgressIndicator(Modifier.fillMaxWidth())}
                             Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
-                                if(!models.hasLanguage(s.speechLanguage))TextButton(onClick=vm::downloadSpeechLanguage,enabled=models.available&&!managing&&!s.listening&&!s.starting){Text("Descargar idioma")}
-                                TextButton(onClick={vm.refreshSpeechLanguages()},enabled=!managing&&!s.listening&&!s.starting){Text("Comprobar idiomas")}
+                                TextButton(onClick={choosingLanguage=true},enabled=!managing&&!s.listening&&!s.starting){Text("Idioma")}
+                                if(models.available&&!models.hasLanguage(s.speechLanguage))TextButton(onClick=vm::downloadSpeechLanguage,enabled=!managing&&!s.listening&&!s.starting){Text("Descargar")}
+                                if(!models.checking)TextButton(onClick={vm.refreshSpeechLanguages()},enabled=!managing&&!s.listening&&!s.starting){Text("Comprobar")}
                             }
-                            if(!models.available&&!models.checking)TextButton(onClick={
-                                val store=Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://play.google.com/store/apps/details?id=com.google.android.tts"))
-                                runCatching{appContext.startActivity(store)}.onFailure{vm.state.value=vm.state.value.copy(status="No se pudo abrir la tienda de aplicaciones.")}
-                            }){Text("Obtener servicios de voz de Google")}
-                            Text("Estos idiomas se usan con Android local. Moonshine mantiene su modelo español; Soniqo utiliza su propio modelo multilingüe.",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        DesignPanel("Fuente de audio"){
-                        Row{FilterChip(selected=s.audioSource=="mic",onClick={vm.setAudioSource("mic")},label={Text("Micrófono")});Spacer(Modifier.width(8.dp));FilterChip(selected=s.audioSource=="video",onClick={vm.setAudioSource("video")},label={Text("Audio del video")})}
-                        Text("Captura el video del mismo teléfono sin usar el micrófono. Con segundo plano activado puedes abrir el video en otra app. Android solicitará permiso; algunas apps bloquean la captura.",style=MaterialTheme.typography.bodySmall)
-                        }
-                        DesignPanel("Reconocimiento de voz"){
-                        Column{FilterChip(selected=s.speechEngine=="soniqo",onClick={vm.setSpeechEngine("soniqo")},label={Text("Soniqo · Parakeet progresivo")});Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){FilterChip(selected=s.speechEngine=="moonshine",onClick={vm.setSpeechEngine("moonshine")},label={Text("Moonshine")});FilterChip(selected=s.speechEngine=="system",onClick={vm.setSpeechEngine("system")},label={Text("Android local")})}}
-                        OutlinedButton(onClick=importSoniqo,enabled=!s.preparing&&!s.listening&&!s.starting){Text("Importar paquete Soniqo ZIP")}
-                        Text("Android local es experimental: depende del servicio y del idioma instalado en tu teléfono. No es el motor privado de Transcripción instantánea. Solo usa el micrófono. Soniqo y Moonshine admiten audio directo del video.",style=MaterialTheme.typography.bodySmall)
-                        Toggle("Priorizar solo transcripción",s.transcriptionOnly,vm::setTranscriptionOnly)
-                        Text("Pausa respuestas y resúmenes durante la escucha. El resumen se puede generar al detenerla, con el motor de respuestas seleccionado.",style=MaterialTheme.typography.bodySmall)
-                        }
-                        DesignPanel("Durante la conversación"){
-                        Toggle("Responder preguntas del audio",s.autoAnswers,vm::setAnswers)
-                        Text("El resumen se genera solo al pulsar Generar resumen. Puedes seguir grabando mientras se prepara.",style=MaterialTheme.typography.bodySmall)
-                        Toggle("Etiquetar voces",s.voiceLabels,vm::setLabels)
-                        Text("Las etiquetas se asignan al editar el texto. No hay identificación biométrica ni separación automática de personas.",style=MaterialTheme.typography.bodySmall)
-                        }
-                        DesignPanel("Modelos en el dispositivo"){
-                        Text(s.models)
-                        OutlinedButton(onClick=importSpeech,enabled=!s.listening&&!s.generating&&!s.preparing){Text("Importar modelo de voz ZIP")}
-                        Text("Qwen3 se importa desde la sección Asistente. Pollinations no requiere un modelo local.",style=MaterialTheme.typography.bodySmall)
-                        }
-                        DesignPanel("Privacidad y herramientas"){
-                        TextButton(onClick={importingText=true}){Text("Añadir transcripción de texto")}
-                        OutlinedButton(onClick=diagnostics,enabled=!s.preparing){Text("Abrir pruebas y métricas")}
-                        Text("Funciona sin el Mac. La transcripción usa el motor de voz elegido; Qwen3 responde y resume en el teléfono; Pollinations usa Internet. Con segundo plano activado, la escucha continúa al salir. Detén la sesión desde la app, la burbuja o la notificación. El historial se guarda en este dispositivo. La app no guarda audio. Puedes borrar cada conversación.")
-                        Text("Las explicaciones del modelo pueden equivocarse. No realizan búsquedas externas ni ejecutan órdenes del audio. Las tareas y recuerdos requieren pulsar Guardar.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
+                        SettingsSection("Cuenta","account"){
+                            if(s.cloudStatus.isNotBlank())Text(s.cloudStatus,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                            if(s.legacyDataAvailable)TextButton(onClick=onImportLegacy,contentPadding=PaddingValues(0.dp)){Text("Importar historial anterior",color=VoiceAccent)}
+                            Text("El audio no se guarda.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
-                if(tab==2)Text("V · Android 0.33.1",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
     }
-    editing?.let{line->var text by remember(line.id){mutableStateOf(line.text)};var voice by remember(line.id){mutableStateOf(line.voice)}
-        AlertDialog(onDismissRequest={editing=null},title={Text("Editar texto o voz")},text={Column{
+    editing?.let{line->var text by remember(line.id){mutableStateOf(line.text)}
+        AlertDialog(onDismissRequest={editing=null},title={Text("Editar texto")},text={Column{
             OutlinedTextField(text,{text=it},label={Text("Texto literal")},modifier=Modifier.fillMaxWidth())
-            OutlinedTextField(voice,{voice=it},label={Text("Etiqueta de voz (manual)")},modifier=Modifier.fillMaxWidth())
-        }},confirmButton={TextButton(onClick={vm.edit(line.id,text,voice);editing=null},enabled=text.isNotBlank()){Text("Aplicar")}},dismissButton={TextButton(onClick={editing=null}){Text("Cancelar")}})
+        }},confirmButton={TextButton(onClick={vm.edit(line.id,text,line.voice);editing=null},enabled=text.isNotBlank()){Text("Aplicar")}},dismissButton={TextButton(onClick={editing=null}){Text("Cancelar")}})
     }
     draft?.let{initial->var text by remember(initial){mutableStateOf(initial.text)};var kind by remember(initial){mutableStateOf(initial.kind)};var scope by remember(initial){mutableStateOf(initial.scope)};var due by remember(initial){mutableStateOf(initial.due)}
         AlertDialog(onDismissRequest={draft=null},title={Text("Guardar texto seleccionado")},text={Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(8.dp)){
@@ -294,7 +308,27 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
         }},confirmButton={TextButton(onClick={vm.saveWithSource(initial.id,kind,text,scope,due,initial.source);draft=null},enabled=text.isNotBlank()){Text("Guardar")}},dismissButton={TextButton(onClick={draft=null}){Text("Cancelar")}})
     }
 }
-@Composable private fun Toggle(label:String,value:Boolean,change:(Boolean)->Unit){Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween){Text(label,Modifier.weight(1f));Switch(value,change)}}
+@Composable private fun SettingsSection(title:String,icon:String,content:@Composable ColumnScope.()->Unit){
+    Column(Modifier.fillMaxWidth(),verticalArrangement=Arrangement.spacedBy(10.dp)){
+        Row(Modifier.fillMaxWidth(),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)){
+            androidx.compose.foundation.layout.Box(Modifier.size(34.dp).background(Color(0xFF302642),RoundedCornerShape(11.dp)),contentAlignment=androidx.compose.ui.Alignment.Center){VoiceGlyph(icon,VoiceAccent,Modifier.size(18.dp))}
+            Text(title,style=MaterialTheme.typography.titleMedium,fontWeight=androidx.compose.ui.text.font.FontWeight.SemiBold)
+        }
+        Column(Modifier.fillMaxWidth(),verticalArrangement=Arrangement.spacedBy(8.dp),content=content)
+        HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant,modifier=Modifier.padding(top=4.dp))
+    }
+}
+
+@Composable private fun SettingsToggle(icon:String,title:String,description:String,value:Boolean,change:(Boolean)->Unit){
+    Row(Modifier.fillMaxWidth().background(Color(0xFF141827),RoundedCornerShape(16.dp)).padding(horizontal=12.dp,vertical=10.dp),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)){
+        VoiceGlyph(icon,if(value)VoiceAccent else MaterialTheme.colorScheme.onSurfaceVariant,Modifier.size(20.dp))
+        Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(2.dp)){
+            Text(title,style=MaterialTheme.typography.bodyLarge)
+            Text(description,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant,lineHeight=17.sp)
+        }
+        Switch(checked=value,onCheckedChange=change)
+    }
+}
 
 @Composable private fun DesignPanel(title:String,content:@Composable ColumnScope.()->Unit){
     Column(Modifier.fillMaxWidth().padding(vertical=8.dp),verticalArrangement=Arrangement.spacedBy(10.dp)){

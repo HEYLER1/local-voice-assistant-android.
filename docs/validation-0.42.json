@@ -1,0 +1,89 @@
+{
+  "date": "2026-11-12",
+  "version": "0.42",
+  "source": "Existing local Gradle reports and APK artifacts; tests were not rerun to prepare this README update.",
+  "tests": {
+    "unit": {
+      "suites": 20,
+      "cases": 105,
+      "passed": 105,
+      "failed": 0,
+      "skipped": 0,
+      "gradle_report_duration_seconds": 1.127,
+      "report_timestamp_local": "2026-11-12 12:05",
+      "by_area": {
+        "questions_and_speech": 22,
+        "conversation_and_organization": 36,
+        "summary_and_answers": 28,
+        "routing_and_metrics": 10,
+        "floating_ui": 9
+      }
+    },
+    "instrumented": {
+      "device": "Pixel_9_Pro AVD",
+      "cases": 1,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "duration_seconds": 0.062,
+      "test": "splitQuestionGetsOneContextualAnswerWithoutNetworkWait",
+      "report_timestamp_local": "2026-11-12 11:27",
+      "note": "Uses the test pipeline; this is not a live provider or microphone-quality test."
+    }
+  },
+  "apk": {
+    "file": "dist/v-asistente-android-0.42.apk",
+    "bytes": 75601493,
+    "mib": 72.0992,
+    "debug_build": true,
+    "play_store_signed": false
+  },
+  "artifact_size_comparison": [
+    {"version": "0.40", "apk_bytes": 135948244, "apk_mib": 129.65, "native_libraries_bytes": 75671312, "native_libraries_mib": 72.17, "native_library_files": 10},
+    {"version": "0.41", "apk_bytes": 76658957, "apk_mib": 73.11, "native_libraries_bytes": 22172888, "native_libraries_mib": 21.15, "native_library_files": 3},
+    {"version": "0.42", "apk_bytes": 75601493, "apk_mib": 72.10, "native_libraries_bytes": 22172888, "native_libraries_mib": 21.15, "native_library_files": 3}
+  ],
+  "artifact_size_change_0_40_to_0_42_percent": {
+    "apk_reduction": 44.389,
+    "native_libraries_reduction": 70.706
+  },
+  "online_latency_experiment": {
+    "date": "2026-10-31",
+    "environment": "Pixel 9 Pro emulator with the current macOS HTTPS proxy",
+    "input": "Fictional typed class questions; no audio or personal transcripts",
+    "samples_seconds_to_first_text": {
+      "baseline": [7.41, 45.83],
+      "compact": [22.15, 43.30],
+      "short": [37.08, 44.24]
+    },
+    "completed": 6,
+    "failed": 0,
+    "overall_median_seconds": 40.19,
+    "overall_mean_seconds": 33.335,
+    "observed_range_seconds": [7.41, 45.83],
+    "by_profile_median_seconds": {
+      "baseline": 26.62,
+      "compact": 32.72,
+      "short": 40.66
+    },
+    "limits": [
+      "Two samples per profile are too few to compare performance reliably.",
+      "These are online text-query times, not audio-to-answer latency.",
+      "Service load and different questions affect the measurements."
+    ]
+  },
+  "separate_live_checks": {
+    "connection_reuse_probe": {
+      "https_preparation_seconds": 18.61,
+      "first_text_after_warm_connection_seconds": 3.37,
+      "input": "One-token arithmetic answer; not a representative class question."
+    },
+    "structured_summary_runs_seconds": [13.25, 50.32],
+    "summary_input": "Fictional astronomy text; separate runs under different service conditions."
+  },
+  "security_and_privacy": {
+    "personal_transcripts_used": false,
+    "firebase_configuration_in_repository": false,
+    "apk_in_repository": false
+  }
+}

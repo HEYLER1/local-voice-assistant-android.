@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="390" viewBox="0 0 900 390" role="img" aria-labelledby="title desc">
+  <title id="title">Tamaño de APK y bibliotecas nativas</title>
+  <desc id="desc">APK: 129.65 MiB en versión 0.40, 73.11 MiB en 0.41 y 72.10 MiB en 0.42. Bibliotecas nativas: 72.17 MiB en 0.40 y 21.15 MiB en las versiones 0.41 y 0.42.</desc>
+  <rect width="900" height="390" rx="24" fill="#111522"/>
+  <text x="36" y="48" fill="#f5f2ff" font-family="Arial,sans-serif" font-size="24" font-weight="700">Tamaño de artefactos Android</text>
+  <text x="36" y="77" fill="#aeb5c7" font-family="Arial,sans-serif" font-size="15">Medido en APKs locales · MiB (1 MiB = 1.048.576 bytes)</text>
+  <text x="36" y="121" fill="#dcd8eb" font-family="Arial,sans-serif" font-size="17" font-weight="700">APK completo</text>
+  <text x="36" y="158" fill="#aeb5c7" font-family="Arial,sans-serif" font-size="15">0.40</text><rect x="105" y="139" width="600" height="23" rx="11" fill="#8268d8"/><text x="720" y="157" fill="#f5f2ff" font-family="Arial,sans-serif" font-size="15">129,65</text>
+  <text x="36" y="193" fill="#aeb5c7" font-family="Arial,sans-serif" font-size="15">0.41</text><rect x="105" y="174" width="338" height="23" rx="11" fill="#9d84ec"/><text x="458" y="192" fill="#f5f2ff" font-family="Arial,sans-serif" font-size="15">73,11</text>
+  <text x="36" y="228" fill="#aeb5c7" font-family="Arial,sans-serif" font-size="15">0.42</text><rect x="105" y="209" width="333" height="23" rx="11" fill="#31c5aa"/><text x="453" y="227" fill="#f5f2ff" font-family="Arial,sans-serif" font-size="15">72,10</text>
+  <text x="36" y="274" fill="#dcd8eb" font-family="Arial,sans-serif" font-size="17" font-weight="700">Bibliotecas nativas comprimidas</text>
+  <text x="36" y="310" fill="#aeb5c7" font-family="Arial,sans-serif" font-size="15">0.40</text><rect x="105" y="291" width="600" height="23" rx="11" fill="#8268d8"/><text x="720" y="309" fill="#f5f2ff" font-family="Arial,sans-serif" font-size="15">72,17</text>
+  <text x="36" y="345" fill="#aeb5c7" font-family="Arial,sans-serif" font-size="15">0.42</text><rect x="105" y="326" width="176" height="23" rx="11" fill="#31c5aa"/><text x="296" y="344" fill="#f5f2ff" font-family="Arial,sans-serif" font-size="15">21,15 · −70,7 %</text>
+  <text x="748" y="371" fill="#aeb5c7" font-family="Arial,sans-serif" font-size="13">0.41: 3 bibliotecas · 0.42: 3 bibliotecas</text>
+</svg>

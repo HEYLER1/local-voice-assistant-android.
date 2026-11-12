@@ -36,8 +36,8 @@ internal class SystemSpeech(private val context:Context,private val onText:(Long
     fun start(audioSource:ParcelFileDescriptor?=null,language:String=DEFAULT_SPEECH_LANGUAGE){
         check(Looper.myLooper()==Looper.getMainLooper())
         check(stopped.isCompleted){"La captura anterior todavía se está cerrando"}
-        if(Build.VERSION.SDK_INT<33){onFailure("La escucha continua de Android local requiere Android 13 o superior. Selecciona Moonshine.");return}
-        if(!SpeechRecognizer.isOnDeviceRecognitionAvailable(context)){onFailure("Este dispositivo no ofrece reconocimiento local. Selecciona Moonshine.");return}
+        if(Build.VERSION.SDK_INT<33){onFailure("La transcripción local continua requiere Android 13 o superior.");return}
+        if(!SpeechRecognizer.isOnDeviceRecognitionAvailable(context)){onFailure("Este dispositivo no tiene activo un servicio de voz local. Comprueba los servicios de voz de Google.");return}
         lastFrame=SystemClock.elapsedRealtime();lastWrite=lastFrame;lastResult=lastFrame;voiceMillis=0;monitorEnabled=audioSource==null
         stopped=CompletableDeferred();running=true;lineId=System.nanoTime();lastText="";sessionStarts=0
         try{
@@ -53,7 +53,7 @@ internal class SystemSpeech(private val context:Context,private val onText:(Long
                 override fun onPartialResults(results:Bundle?){emit(results,false)}
                 override fun onSegmentResults(results:Bundle){if(!running)return;emit(results,true);lastText="";lineId++}
                 override fun onEndOfSegmentedSession(){if(running)interrupt("El servicio terminó la sesión continua")}
-                override fun onResults(results:Bundle?){if(!running)return;emit(results,true);lastText="";fail("El servicio no mantuvo la sesión segmentada. Selecciona Moonshine para escucha continua.")}
+                override fun onResults(results:Bundle?){if(!running)return;emit(results,true);lastText="";fail("El servicio local terminó la sesión continua. Vuelve a iniciar la escucha.")}
                 override fun onError(error:Int){if(!running)return
                     if(error in listOf(SpeechRecognizer.ERROR_SERVER,SpeechRecognizer.ERROR_SERVER_DISCONNECTED,SpeechRecognizer.ERROR_RECOGNIZER_BUSY,SpeechRecognizer.ERROR_SPEECH_TIMEOUT,SpeechRecognizer.ERROR_NO_MATCH)){interrupt("El servicio local interrumpió la sesión (código $error)");return}
                     fail(when(error){
@@ -125,6 +125,8 @@ internal class SystemSpeech(private val context:Context,private val onText:(Long
             .putExtra(RecognizerIntent.EXTRA_LANGUAGE,language)
             .putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS,true)
             .putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE,true)
+            .putExtra(RecognizerIntent.EXTRA_ENABLE_FORMATTING,RecognizerIntent.FORMATTING_OPTIMIZE_LATENCY)
+            .putExtra(RecognizerIntent.EXTRA_HIDE_PARTIAL_TRAILING_PUNCTUATION,true)
             .putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE,source)
             .putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE_CHANNEL_COUNT,1)
             .putExtra(RecognizerIntent.EXTRA_AUDIO_SOURCE_ENCODING,AudioFormat.ENCODING_PCM_16BIT)
