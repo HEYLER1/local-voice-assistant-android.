@@ -53,9 +53,12 @@ import androidx.compose.ui.unit.sp
     val issue=SummaryIssues.display(s.summaryError)
     val tools:@Composable ()->Unit={
         Column(horizontalAlignment=Alignment.Start){
-            IconButton(onClick=onRefresh,enabled=canRefresh,modifier=Modifier.size(44.dp).background(Color(0xFF302642),CircleShape).semantics{contentDescription="Generar resumen"}){
-                if(s.summaryPending||s.analysisRunning||s.researchRunning)CircularProgressIndicator(Modifier.size(18.dp),strokeWidth=2.dp,color=VoiceAccent)
-                else VoiceGlyph("spark",VoiceAccent,Modifier.size(20.dp))
+            TextButton(onClick=onRefresh,enabled=canRefresh,contentPadding=PaddingValues(horizontal=12.dp,vertical=8.dp),modifier=Modifier.background(Color(0xFF302642),CircleShape).semantics{contentDescription="Ver un video para generar el resumen"}){
+                Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)){
+                    if(s.summaryPending||s.analysisRunning||s.researchRunning)CircularProgressIndicator(Modifier.size(16.dp),strokeWidth=2.dp,color=VoiceAccent)
+                    else VoiceGlyph("lock",VoiceAccent,Modifier.size(16.dp))
+                    Text(if(s.summaryPending||s.analysisRunning||s.researchRunning)"Generando resumen…"else "Resumen · ver video",style=MaterialTheme.typography.labelLarge)
+                }
             }
             if(issue.isNotBlank())Text(issue,color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.labelSmall,modifier=Modifier.widthIn(max=300.dp).padding(start=8.dp,top=4.dp))
         }

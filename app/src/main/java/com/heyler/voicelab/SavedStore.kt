@@ -48,6 +48,15 @@ class SavedStore(context:Context,databaseName:String="selected-text.db",private 
     fun clearCloudDeletion(cloudId:String){writableDatabase.delete("sync_deletions","cloud_id=? AND owner_id=?",arrayOf(cloudId,ownerId))}
     fun removeFromCloud(cloudId:String){writableDatabase.delete("selected","cloud_id=? AND owner_id=?",arrayOf(cloudId,ownerId));clearCloudDeletion(cloudId)}
     fun delete(id:Long){val db=writableDatabase;val cloudId=cloudId(id);if(ownerId!="legacy"&&!cloudId.isNullOrBlank())db.insertWithOnConflict("sync_deletions",null,ContentValues().apply{put("cloud_id",cloudId);put("deleted_at",System.currentTimeMillis());put("owner_id",ownerId)},SQLiteDatabase.CONFLICT_REPLACE);db.delete("selected","id=? AND owner_id=?",arrayOf(id.toString(),ownerId))}
+    fun deleteOwnedData(){
+        val db=writableDatabase
+        db.beginTransaction()
+        try{
+            db.delete("selected","owner_id=?",arrayOf(ownerId))
+            db.delete("sync_deletions","owner_id=?",arrayOf(ownerId))
+            db.setTransactionSuccessful()
+        }finally{db.endTransaction()}
+    }
     fun done(id:Long,value:Boolean){writableDatabase.update("selected",ContentValues().apply{put("done",if(value)1 else 0);put("updated",System.currentTimeMillis())},"id=? AND owner_id=?",arrayOf(id.toString(),ownerId))}
     fun hasLegacyData():Boolean=readableDatabase.rawQuery("SELECT 1 FROM selected WHERE owner_id='legacy' LIMIT 1",null).use{it.moveToFirst()}
     fun assignLegacyDataToCurrentOwner(){require(ownerId!="legacy");writableDatabase.update("selected",ContentValues().apply{put("owner_id",ownerId)},"owner_id='legacy'",null)}

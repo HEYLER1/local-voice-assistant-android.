@@ -2,6 +2,7 @@ package com.heyler.voicelab
 
 import android.Manifest
 import android.content.Intent
+import android.net.Uri
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
@@ -10,6 +11,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
+import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.background
@@ -31,11 +33,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
+import kotlin.math.roundToInt
+
+private const val MINIMUM_AD_AGE=13
+private const val MAXIMUM_AD_AGE=100
 
 class MainActivity:ComponentActivity(){
     internal lateinit var assistant:AssistantViewModel
         private set
     private lateinit var googleAuth:GoogleAuthRepository
+    private lateinit var adMob:AdMobIntegration
     private var requestedAnswerId by mutableStateOf<String?>(null)
     private var tts:TextToSpeech?=null
     private var localVoiceReady=false
@@ -69,6 +76,7 @@ class MainActivity:ComponentActivity(){
         super.onCreate(savedInstanceState);enableEdgeToEdge(statusBarStyle=SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),navigationBarStyle=SystemBarStyle.dark(android.graphics.Color.TRANSPARENT));assistant=(application as AssistantApplication).assistant;googleAuth=GoogleAuthRepository(this)
         tts=TextToSpeech(this){status->if(status==TextToSpeech.SUCCESS){val voice=tts?.voices?.firstOrNull{it.locale.language=="es"&&!it.isNetworkConnectionRequired};if(voice!=null){tts?.voice=voice;localVoiceReady=true}}}
         requestedAnswerId=intent?.getStringExtra(FLOATING_ANSWER_ID)
+        adMob=(application as AssistantApplication).adMob
         setContent{VoiceTheme{
             val auth by googleAuth.state.collectAsState()
             val scope=rememberCoroutineScope()
@@ -76,9 +84,11 @@ class MainActivity:ComponentActivity(){
             var signInError by remember{mutableStateOf("")}
             var restoredUid by remember{mutableStateOf<String?>(null)}
             var legacyPrompt by remember{mutableStateOf(false)}
+            var deletingAccount by remember{mutableStateOf(false)}
+            var accountDeletionError by remember{mutableStateOf("")}
             when(val current=auth){
-                GoogleAuthState.ConfigurationRequired->GoogleSignInScreen(configured=false,busy=false,error=""){ }
-                GoogleAuthState.SignedOut->GoogleSignInScreen(configured=true,busy=signingIn,error=signInError){entry->
+                GoogleAuthState.ConfigurationRequired->GoogleSignInScreen(configured=false,busy=false,error="",onOpenPrivacyWeb={openLegalPage(PRIVACY_POLICY_URL)},onOpenDeletionWeb={openLegalPage(ACCOUNT_DELETION_URL)}){ }
+                GoogleAuthState.SignedOut->GoogleSignInScreen(configured=true,busy=signingIn,error=signInError,onOpenPrivacyWeb={openLegalPage(PRIVACY_POLICY_URL)},onOpenDeletionWeb={openLegalPage(ACCOUNT_DELETION_URL)}){entry->
                     scope.launch{
                         signingIn=true
                         try{googleAuth.signIn(this@MainActivity,entry);signInError=""}
@@ -88,15 +98,49 @@ class MainActivity:ComponentActivity(){
                     }
                 }
                 is GoogleAuthState.SignedIn->{
-                    LaunchedEffect(current.account.uid){restoredUid=null;legacyPrompt=assistant.restoreConversation(current.account.uid);restoredUid=current.account.uid}
+                    LaunchedEffect(current.account.uid){restoredUid=null;adMob.selectAccount(current.account.uid,this@MainActivity);legacyPrompt=assistant.restoreConversation(current.account.uid);restoredUid=current.account.uid}
                     if(restoredUid!=current.account.uid)Box(Modifier.fillMaxSize().systemBarsPadding(),contentAlignment=androidx.compose.ui.Alignment.Center){CircularProgressIndicator(color=VoiceAccent)}
+                    else if(adMob.ageTreatment==null)AgeGateScreen(onContinue={adMob.saveAge(this@MainActivity,current.account.uid,it)})
                     else{
                         val s by assistant.state.collectAsState()
                         AssistantScreen(assistant,
                             listen={tts?.stop();if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)==PackageManager.PERMISSION_GRANTED)requestListening()else permission.launch(Manifest.permission.RECORD_AUDIO)},
                             speak={text->if(localVoiceReady){assistant.pause();tts?.speak(text,TextToSpeech.QUEUE_FLUSH,null,"local-answer")}else assistant.state.value=assistant.state.value.copy(status="Instala una voz española sin conexión en los ajustes de Android para escuchar respuestas.")},
                             stopVoice={tts?.stop()},floatingControl=::floatingControl,requestedAnswerId=requestedAnswerId,onAnswerRequestHandled={requestedAnswerId=null},account=current.account,
-                            onSignOut={scope.launch{assistant.deactivateAccount();googleAuth.signOut()}},onImportLegacy=assistant::importLegacyData)
+                            onSignOut={adMob.clearAccount();scope.launch{assistant.deactivateAccount();googleAuth.signOut()}},onImportLegacy=assistant::importLegacyData,
+                            onDeleteAccount={if(!deletingAccount)scope.launch{
+                                deletingAccount=true;accountDeletionError=""
+                                var authAccountDeleted=false
+                                try{
+                                    val uid=googleAuth.deleteAccount(this@MainActivity){owner->assistant.deleteCloudAccountData(owner)}
+                                    authAccountDeleted=true
+                                    assistant.purgeDeletedAccountData(uid)
+                                    adMob.forgetDeletedAccount(uid)
+                                    accountDeletionError=""
+                                }catch(error:Throwable){
+                                    if(!authAccountDeleted)assistant.resumeCloudAfterDeletionFailure(current.account.uid)
+                                    accountDeletionError=googleAuth.deletionMessage(error)
+                                }
+                                finally{deletingAccount=false}
+                            }},deletingAccount=deletingAccount,accountDeletionError=accountDeletionError,
+                            onOpenPrivacyWeb={openLegalPage(PRIVACY_POLICY_URL)},onOpenDeletionWeb={openLegalPage(ACCOUNT_DELETION_URL)},
+                            adAge=adMob.ageYears,privacyOptionsRequired=adMob.privacyOptionsRequired,
+                            onAgeSelected={adMob.saveAge(this@MainActivity,current.account.uid,it)},onManageAdPrivacy={adMob.showPrivacyOptions(this@MainActivity)},
+                            onSummaryRequest={
+                                val current=assistant.state.value
+                                val blocker=when {
+                                    current.listening||current.starting -> "Detén la escucha para generar el resumen."
+                                    else -> assistant.summaryBlocker()
+                                }
+                                if(blocker!=null)assistant.state.value=current.copy(status=blocker,summaryError=blocker)
+                                else adMob.showRewardedSummary(this@MainActivity,assistant::requestSummary,{
+                                    val latest=assistant.state.value
+                                    assistant.state.value=latest.copy(status="No hay un video disponible ahora. Inténtalo en unos segundos.",summaryError="No hay un anuncio disponible ahora. Inténtalo en unos segundos.")
+                                },{
+                                    val latest=assistant.state.value
+                                    assistant.state.value=latest.copy(status="El video no se completó. El resumen no se generó.",summaryError="Completa el video para generar el resumen.")
+                                })
+                            })
                         DisposableEffect(s.listening||s.generating){if(s.listening||s.generating)window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);onDispose{}}
                         if(legacyPrompt&&s.legacyDataAvailable)AlertDialog(onDismissRequest={assistant.dismissLegacyImportPrompt();legacyPrompt=false},title={Text("Conversaciones anteriores")},text={Text("Encontré conversaciones y textos guardados antes de iniciar sesión. Puedes asociarlos a esta cuenta; se sincronizarán cuando Firestore esté configurado.")},confirmButton={TextButton(onClick={assistant.importLegacyData();legacyPrompt=false}){Text("Asociar a esta cuenta")}},dismissButton={TextButton(onClick={assistant.dismissLegacyImportPrompt();legacyPrompt=false}){Text("Dejar aparte")}})
                     }
@@ -106,14 +150,53 @@ class MainActivity:ComponentActivity(){
     }
     override fun onNewIntent(intent:Intent){super.onNewIntent(intent);setIntent(intent);requestedAnswerId=intent.getStringExtra(FLOATING_ANSWER_ID)}
     companion object{internal const val FLOATING_ANSWER_ID="floating-answer-id"}
-    override fun onStart(){super.onStart();assistant.resumeForeground()}
+    private fun openLegalPage(url:String){
+        runCatching{startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(url)))}
+            .onFailure{assistant.state.value=assistant.state.value.copy(status="No se pudo abrir la página. Comprueba la conexión e inténtalo de nuevo.")}
+    }
+    override fun onStart(){super.onStart();assistant.resumeForeground();if(::adMob.isInitialized){val s=assistant.state.value;adMob.onAppForeground(this,s.listening||s.starting||s.generating||s.summaryPending)}}
     override fun onStop(){if(!isChangingConfigurations)assistant.background();tts?.stop();super.onStop()}
     override fun onDestroy(){if(::googleAuth.isInitialized)googleAuth.close();tts?.shutdown();super.onDestroy()}
 }
 
+@Composable private fun AgeGateScreen(onContinue:(Int)->Unit){
+    var selectedAge by remember{mutableStateOf<Int?>(null)}
+    Column(Modifier.fillMaxSize().background(Color(0xFF0B0E16)).imePadding().systemBarsPadding().padding(horizontal=24.dp,vertical=20.dp)){
+        Column(Modifier.weight(1f),verticalArrangement=Arrangement.Center,horizontalAlignment=androidx.compose.ui.Alignment.CenterHorizontally){
+            Text("Tu edad",style=MaterialTheme.typography.titleLarge,color=Color(0xFFF3F2F9),textAlign=androidx.compose.ui.text.style.TextAlign.Center)
+            Spacer(Modifier.height(18.dp))
+            AgeTreatmentSelector(selectedAge){selectedAge=it}
+        }
+        Spacer(Modifier.height(16.dp))
+        Button(onClick={selectedAge?.let(onContinue)},enabled=selectedAge!=null,modifier=Modifier.fillMaxWidth().heightIn(min=56.dp)){
+            Text("Siguiente",style=MaterialTheme.typography.titleMedium)
+        }
+    }
+}
+
+@Composable private fun AgeTreatmentSelector(selectedAge:Int?,onSelected:(Int)->Unit){
+    var sliderValue by remember(selectedAge){mutableFloatStateOf((selectedAge?:MINIMUM_AD_AGE).toFloat())}
+    Column(Modifier.fillMaxWidth(0.5f),verticalArrangement=Arrangement.spacedBy(4.dp),horizontalAlignment=androidx.compose.ui.Alignment.CenterHorizontally){
+        Text(selectedAge?.let{"$it años"}?:"Desliza para elegir",modifier=Modifier.fillMaxWidth(),color=if(selectedAge==null)MaterialTheme.colorScheme.onSurfaceVariant else VoiceAccent,style=MaterialTheme.typography.titleMedium,textAlign=androidx.compose.ui.text.style.TextAlign.Center)
+        Slider(value=sliderValue,onValueChange={value->
+            sliderValue=value
+            onSelected(value.roundToInt().coerceIn(MINIMUM_AD_AGE,MAXIMUM_AD_AGE))
+        },valueRange=MINIMUM_AD_AGE.toFloat()..MAXIMUM_AD_AGE.toFloat(),steps=MAXIMUM_AD_AGE-MINIMUM_AD_AGE-1)
+        Row(Modifier.fillMaxWidth(),verticalAlignment=androidx.compose.ui.Alignment.CenterVertically){
+            TextButton(onClick={sliderValue=MINIMUM_AD_AGE.toFloat();onSelected(MINIMUM_AD_AGE)},contentPadding=PaddingValues(horizontal=2.dp,vertical=2.dp)){
+                Text("$MINIMUM_AD_AGE",style=MaterialTheme.typography.labelMedium,color=if(selectedAge==MINIMUM_AD_AGE)VoiceAccent else MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick={sliderValue=MAXIMUM_AD_AGE.toFloat();onSelected(MAXIMUM_AD_AGE)},contentPadding=PaddingValues(horizontal=2.dp,vertical=2.dp)){
+                Text("$MAXIMUM_AD_AGE+",style=MaterialTheme.typography.labelMedium,color=if(selectedAge==MAXIMUM_AD_AGE)VoiceAccent else MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
 private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val text:String="",val scope:String="",val due:String="",val source:String="Texto escrito por usuario")
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable internal fun AssistantScreen(vm:AssistantViewModel,listen:()->Unit,speak:(String)->Unit,stopVoice:()->Unit,initialTab:Int=0,initialSection:Int=0,initialDrawer:Boolean=false,floatingControl:(Boolean)->Unit=vm::setFloatingControl,requestedAnswerId:String?=null,onAnswerRequestHandled:()->Unit={},account:GoogleAccountInfo?=null,onSignOut:()->Unit={},onImportLegacy:()->Unit={}){
+@Composable internal fun AssistantScreen(vm:AssistantViewModel,listen:()->Unit,speak:(String)->Unit,stopVoice:()->Unit,initialTab:Int=0,initialSection:Int=0,initialDrawer:Boolean=false,floatingControl:(Boolean)->Unit=vm::setFloatingControl,requestedAnswerId:String?=null,onAnswerRequestHandled:()->Unit={},account:GoogleAccountInfo?=null,onSignOut:()->Unit={},onDeleteAccount:()->Unit={},deletingAccount:Boolean=false,accountDeletionError:String="",onOpenPrivacyWeb:()->Unit={},onOpenDeletionWeb:()->Unit={},onImportLegacy:()->Unit={},adAge:Int?=null,privacyOptionsRequired:Boolean=false,onAgeSelected:(Int)->Unit={},onManageAdPrivacy:()->Unit={},onSummaryRequest:()->Unit=vm::requestSummary){
     val s by vm.state.collectAsState()
     var liveSection by rememberSaveable{mutableIntStateOf(initialSection)}
     var tab by remember{mutableIntStateOf(initialTab)}
@@ -129,6 +212,11 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
     val keyboard=LocalSoftwareKeyboardController.current
     val drawer=rememberDrawerState(if(initialDrawer)DrawerValue.Open else DrawerValue.Closed)
     val scope=rememberCoroutineScope()
+    BackHandler(enabled=tab!=0){
+        tab=0
+        librarySearching=false
+        keyboard?.hide()
+    }
     LaunchedEffect(requestedAnswerId){
         if(requestedAnswerId!=null){sentAnswerId=requestedAnswerId;liveSection=1;tab=0;drawer.close();onAnswerRequestHandled()}
     }
@@ -142,12 +230,27 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
     var folderEdit by remember{mutableStateOf<Long?>(null)}
     var folderDelete by remember{mutableStateOf<Long?>(null)}
     var confirmSignOut by remember{mutableStateOf(false)}
+    var confirmAccountDeletion by remember{mutableStateOf(false)}
+    var showPrivacyPolicy by remember{mutableStateOf(false)}
     var showAccountDetails by remember{mutableStateOf(false)}
+    var showAdAgeDialog by rememberSaveable{mutableStateOf(false)}
+    var ageDraft by remember{mutableStateOf<Int?>(null)}
     val accountInitials=remember(account){
         val words=account?.displayName.orEmpty().trim().split(Regex("\\s+")).filter{it.isNotBlank()}
         when{words.size>=2->"${words.first().first()}${words.last().first()}";words.isNotEmpty()->words.first().take(2);else->account?.email.orEmpty().substringBefore('@').filter{it.isLetterOrDigit()}.take(2).ifBlank{"V"}}.uppercase()
     }
     if(confirmSignOut)GoogleSignOutDialog({confirmSignOut=false;onSignOut()},{confirmSignOut=false})
+    if(showAdAgeDialog)AlertDialog(
+        onDismissRequest={if(adAge!=null){showAdAgeDialog=false;ageDraft=null}},
+        title={Text("Tu edad")},
+        text={Box(Modifier.fillMaxWidth(),contentAlignment=androidx.compose.ui.Alignment.Center){AgeTreatmentSelector(ageDraft){ageDraft=it}}},
+        confirmButton={TextButton(enabled=ageDraft!=null,onClick={
+            ageDraft?.let(onAgeSelected)
+            showAdAgeDialog=false
+            ageDraft=null
+        }){Text("Guardar")}},
+        dismissButton={if(adAge!=null)TextButton(onClick={showAdAgeDialog=false;ageDraft=null}){Text("Cancelar")}}
+    )
     if(showAccountDetails){
         val email=account?.email.orEmpty()
         val handle=email.substringBefore('@').takeIf{it.isNotBlank()}?.let{"@$it"}?:"Cuenta local"
@@ -175,10 +278,23 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
                         if(email.isNotBlank())Text(email,style=MaterialTheme.typography.bodyMedium,color=Color(0xFFCDD2DE),textAlign=androidx.compose.ui.text.style.TextAlign.Center,maxLines=2)
                     }
                     Button(onClick={showAccountDetails=false},modifier=Modifier.fillMaxWidth(),colors=ButtonDefaults.buttonColors(containerColor=VoiceAccent,contentColor=Color(0xFF201337))){Text("Listo",fontWeight=androidx.compose.ui.text.font.FontWeight.Medium)}
+                    if(connected)TextButton(onClick={showAccountDetails=false;confirmAccountDeletion=true},enabled=!deletingAccount){Text("Eliminar cuenta",color=MaterialTheme.colorScheme.error)}
                 }
             }
         }
     }
+    if(confirmAccountDeletion)AlertDialog(
+        onDismissRequest={if(!deletingAccount)confirmAccountDeletion=false},
+        title={Text("¿Eliminar cuenta y datos?")},
+        text={Column(verticalArrangement=Arrangement.spacedBy(10.dp)){
+            Text("Se borrarán de la nube y de este teléfono las conversaciones, transcripciones, respuestas, resúmenes y textos guardados de esta cuenta. Tendrás que confirmar tu identidad con Google. Tu cuenta de Google no se elimina.")
+            if(accountDeletionError.isNotBlank())Text(accountDeletionError,color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodySmall)
+            TextButton(onClick=onOpenDeletionWeb,enabled=!deletingAccount,contentPadding=PaddingValues(0.dp)){Text("No puedo entrar a la app")}
+        }},
+        confirmButton={TextButton(onClick=onDeleteAccount,enabled=!deletingAccount){if(deletingAccount)CircularProgressIndicator(Modifier.size(18.dp),strokeWidth=2.dp)else Text("Eliminar todo",color=MaterialTheme.colorScheme.error)}},
+        dismissButton={TextButton(onClick={confirmAccountDeletion=false},enabled=!deletingAccount){Text("Cancelar")}}
+    )
+    if(showPrivacyPolicy)PrivacyPolicyDialog(onDismiss={showPrivacyPolicy=false},onOpenWeb=onOpenPrivacyWeb)
     moving?.let{target->FolderPicker(s.folders,if(target.conversation==null)s.folderId else s.history.firstOrNull{it.id==target.conversation}?.folderId,{folder->vm.moveConversation(target.conversation,folder);moving=null},{folderEdit=null;folderName=""},{moving=null})}
     folderName?.let{initial->var name by remember(initial,folderEdit){mutableStateOf(initial)}
         AlertDialog(onDismissRequest={folderName=null},title={Text(if(folderEdit==null)"Nueva carpeta"else "Renombrar carpeta")},text={OutlinedTextField(name,{name=it.take(80)},singleLine=true,label={Text("Nombre")})},confirmButton={TextButton(onClick={
@@ -214,7 +330,7 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
             0->ConversationStage(
                 header={ConversationTopBar(liveSection,{liveSection=it},{keyboard?.hide();scope.launch{drawer.open()}},{vm.newConversation();liveSection=0})},
                 composer={ChatVoiceComposer(s.listening,s.starting,s.audioLevel,!s.preparing,{if(s.listening||s.starting){if(s.listening)liveSection=2;vm.pause()}else {liveSection=0;listen()}},question,{question=it},{if(question.isNotBlank()&&!s.preparing){vm.ask(question.trim());sentAnswerId=vm.state.value.answers.lastOrNull()?.id;question="";liveSection=1;keyboard?.hide()}})}
-            ){readingInsets->key(s.conversationKey){LiveConversation(s,{editing=it},{text,source->draft=SaveDraft(kind=if(source.startsWith("Tarea de clase"))"Tarea"else "Recuerdo",text=text,source=source)},speak,vm::requestSummary,{vm.clearSession();stopVoice()},{vm.stopResponse();stopVoice()},{tab=2},Modifier.fillMaxSize(),liveSection,{liveSection=it},preferredAnswerId=sentAnswerId,transcriptPadding=readingInsets,onResearch=vm::researchSummary)}}
+            ){readingInsets->key(s.conversationKey){LiveConversation(s,{editing=it},{text,source->draft=SaveDraft(kind=if(source.startsWith("Tarea de clase"))"Tarea"else "Recuerdo",text=text,source=source)},speak,onSummaryRequest,{vm.clearSession();stopVoice()},{vm.stopResponse();stopVoice()},{tab=2},Modifier.fillMaxSize(),liveSection,{liveSection=it},preferredAnswerId=sentAnswerId,transcriptPadding=readingInsets,onResearch=vm::researchSummary)}}
             else->Column(Modifier.fillMaxSize().padding(padding).imePadding().verticalScroll(rememberScrollState()).padding(horizontal=20.dp).padding(top=16.dp,bottom=28.dp),verticalArrangement=Arrangement.spacedBy(14.dp)){
                 when(tab){
                     1->{
@@ -282,10 +398,17 @@ private data class SaveDraft(val id:Long?=null,val kind:String="Recuerdo",val te
                                 if(!models.checking)TextButton(onClick={vm.refreshSpeechLanguages()},enabled=!managing&&!s.listening&&!s.starting){Text("Comprobar")}
                             }
                         }
+                        SettingsSection("Anuncios y privacidad","spark"){
+                            Text("Edad · ${adAge?.let{"$it años"}?:"Sin elegir"}",style=MaterialTheme.typography.bodyMedium,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                            TextButton(onClick={ageDraft=adAge;showAdAgeDialog=true},contentPadding=PaddingValues(0.dp)){Text("Cambiar",color=VoiceAccent)}
+                            if(privacyOptionsRequired)TextButton(onClick=onManageAdPrivacy,contentPadding=PaddingValues(0.dp)){Text("Opciones de privacidad",color=VoiceAccent)}
+                        }
                         SettingsSection("Cuenta","account"){
                             if(s.cloudStatus.isNotBlank())Text(s.cloudStatus,style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                             if(s.legacyDataAvailable)TextButton(onClick=onImportLegacy,contentPadding=PaddingValues(0.dp)){Text("Importar historial anterior",color=VoiceAccent)}
                             Text("El audio no se guarda.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+                            TextButton(onClick={showPrivacyPolicy=true},contentPadding=PaddingValues(0.dp)){Text("Política de privacidad",color=VoiceAccent)}
+                            TextButton(onClick=onOpenDeletionWeb,contentPadding=PaddingValues(0.dp)){Text("Solicitud de eliminación web",color=VoiceAccent)}
                         }
                     }
                 }

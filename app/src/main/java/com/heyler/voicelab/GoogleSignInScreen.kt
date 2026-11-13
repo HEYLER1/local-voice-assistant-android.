@@ -8,6 +8,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -21,8 +25,12 @@ import androidx.compose.ui.unit.sp
     configured:Boolean,
     busy:Boolean,
     error:String,
+    onOpenPrivacyWeb:()->Unit={},
+    onOpenDeletionWeb:()->Unit={},
     onSignIn:(GoogleSignInEntry)->Unit
 ){
+    var showPrivacy by remember{mutableStateOf(false)}
+    if(showPrivacy)PrivacyPolicyDialog(onDismiss={showPrivacy=false},onOpenWeb=onOpenPrivacyWeb)
     Column(
         Modifier.fillMaxSize().background(VoiceBackground).verticalScroll(rememberScrollState()).systemBarsPadding().imePadding().padding(horizontal=28.dp,vertical=32.dp),
         horizontalAlignment=Alignment.CenterHorizontally,
@@ -58,6 +66,10 @@ import androidx.compose.ui.unit.sp
                     Text("Al añadir el archivo, vuelve a compilar la app. No se necesitan claves privadas en el código.",style=MaterialTheme.typography.labelSmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
+        }
+        Row(horizontalArrangement=Arrangement.Center,modifier=Modifier.fillMaxWidth().padding(top=12.dp)){
+            TextButton(onClick={showPrivacy=true}){Text("Privacidad",color=VoiceAccent)}
+            TextButton(onClick=onOpenDeletionWeb){Text("Eliminar cuenta",color=VoiceAccent)}
         }
     }
 }

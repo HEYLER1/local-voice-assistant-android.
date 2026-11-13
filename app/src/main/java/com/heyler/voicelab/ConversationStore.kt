@@ -120,6 +120,16 @@ class ConversationStore(context:Context,databaseName:String="conversations.db",p
         };db.setTransactionSuccessful()}finally{db.endTransaction()}
     }
     fun delete(id:Long){val db=writableDatabase;if(ownerId!="legacy")db.insertWithOnConflict("sync_deletions",null,ContentValues().apply{put("id",id);put("deleted_at",System.currentTimeMillis());put("owner_id",ownerId)},SQLiteDatabase.CONFLICT_REPLACE);db.delete("sessions","id=? AND owner_id=?",arrayOf(id.toString(),ownerId))}
+    fun deleteOwnedData(){
+        val db=writableDatabase
+        db.beginTransaction()
+        try{
+            db.delete("sessions","owner_id=?",arrayOf(ownerId))
+            db.delete("folders","owner_id=?",arrayOf(ownerId))
+            db.delete("sync_deletions","owner_id=?",arrayOf(ownerId))
+            db.setTransactionSuccessful()
+        }finally{db.endTransaction()}
+    }
     fun maxSessionId():Long=readableDatabase.rawQuery("SELECT COALESCE(MAX(id),0) FROM sessions",null).use{if(it.moveToFirst())it.getLong(0)else 0L}
     fun hasLegacyData():Boolean=readableDatabase.rawQuery("SELECT 1 FROM sessions WHERE owner_id='legacy' UNION ALL SELECT 1 FROM folders WHERE owner_id='legacy' LIMIT 1",null).use{it.moveToFirst()}
     fun assignLegacyDataToCurrentOwner(){

@@ -2,6 +2,7 @@ package com.heyler.voicelab
 
 import com.google.android.gms.tasks.Task
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Source
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.security.MessageDigest
 import java.util.concurrent.CancellationException
@@ -12,6 +13,28 @@ import kotlin.coroutines.resumeWithException
 internal class CloudHistorySync(private val firestore:FirebaseFirestore=FirebaseFirestore.getInstance()) {
     private fun conversations(uid:String)=firestore.collection("users").document(uid).collection("conversations")
     private fun savedItems(uid:String)=firestore.collection("users").document(uid).collection("savedItems")
+
+    /** Permanently removes all user-owned cloud data, including transcript chunks. */
+    suspend fun deleteAccountData(uid:String){
+        require(uid.isNotBlank()){"No se pudo identificar la cuenta."}
+        val roots=conversations(uid).get(Source.SERVER).awaitValue().documents
+        for(root in roots){
+            val chunks=root.reference.collection("chunks").get(Source.SERVER).awaitValue().documents
+            deleteDocuments(chunks.map{it.reference})
+            root.reference.delete().awaitValue()
+        }
+        val saved=savedItems(uid).get(Source.SERVER).awaitValue().documents
+        deleteDocuments(saved.map{it.reference})
+    }
+
+    private suspend fun deleteDocuments(references:List<com.google.firebase.firestore.DocumentReference>){
+        references.chunked(MAX_BATCH_WRITES).forEach{group->
+            if(group.isEmpty())return@forEach
+            val batch=firestore.batch()
+            group.forEach{batch.delete(it)}
+            batch.commit().awaitValue()
+        }
+    }
 
     suspend fun merge(uid:String,store:ConversationStore,savedStore:SavedStore):Int {
         val remote=conversations(uid).get().awaitValue()

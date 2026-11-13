@@ -18,6 +18,7 @@ import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
 import com.google.firebase.auth.FirebaseAuthInvalidUserException
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.android.gms.tasks.Task
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -78,6 +79,35 @@ internal class GoogleAuthRepository(context:Context):AutoCloseable {
     suspend fun signOut(){
         auth?.signOut()
         runCatching{credentialManager.clearCredentialState(androidx.credentials.ClearCredentialStateRequest())}
+    }
+
+    /** Reauthenticates with Google, lets the caller erase Firestore data, then deletes Firebase Auth. */
+    suspend fun deleteAccount(activity:Activity,deleteCloudData:suspend(uid:String)->Unit):String{
+        val configuredAuth=auth?:error("Firebase no está configurado.")
+        val clientId=webClientId?:error("Falta configurar el cliente OAuth web.")
+        val user=configuredAuth.currentUser?:error("Inicia sesión para eliminar la cuenta.")
+        val option=GetSignInWithGoogleOption.Builder(clientId).setNonce(nonce()).build()
+        val request=GetCredentialRequest.Builder().addCredentialOption(option).build()
+        val credential=credentialManager.getCredential(activity,request).credential as? CustomCredential
+            ?:error("Google no devolvió una credencial compatible.")
+        require(credential.type==GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL){"Google no devolvió un token de identidad."}
+        val token=GoogleIdTokenCredential.createFrom(credential.data).idToken
+        require(token.isNotBlank()){"Google devolvió un token vacío."}
+        user.reauthenticate(GoogleAuthProvider.getCredential(token,null)).awaitResult()
+        deleteCloudData(user.uid)
+        user.delete().awaitResult()
+        runCatching{credentialManager.clearCredentialState(androidx.credentials.ClearCredentialStateRequest())}
+        return user.uid
+    }
+
+    fun deletionMessage(error:Throwable):String=when(error){
+        is GetCredentialCancellationException->"No se confirmó con Google. La cuenta sigue activa."
+        is FirebaseNetworkException->"No hay conexión. No se eliminó la cuenta; vuelve a intentarlo."
+        is FirebaseFirestoreException->if(error.code==FirebaseFirestoreException.Code.PERMISSION_DENIED)
+            "Firebase todavía no permite borrar estos datos. Publica las reglas de Firestore actualizadas e inténtalo de nuevo."
+        else "No se pudo borrar el historial en la nube. La cuenta sigue activa. Inténtalo de nuevo."
+        is FirebaseAuthException->"Google no pudo confirmar la eliminación. La cuenta sigue activa. Vuelve a intentarlo."
+        else->"No se completó la eliminación. La cuenta sigue activa; revisa la conexión e inténtalo de nuevo."
     }
 
     override fun close(){auth?.removeAuthStateListener(listener)}

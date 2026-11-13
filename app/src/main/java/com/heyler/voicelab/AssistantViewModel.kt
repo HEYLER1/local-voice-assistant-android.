@@ -9,9 +9,6 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.selects.select
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
-import java.io.File
 import java.util.UUID
 
 // Speaker names are user assigned labels, never inferred identities.
@@ -22,7 +19,6 @@ private data class Work(val id:String,val source:Long?,val revision:Int,val ques
 
 class AssistantViewModel(app:Application):AndroidViewModel(app){
     private val context=app.applicationContext
-    private val engines=LocalEngines(context)
     internal var online=OnlineAssistant()
     internal var remote:OnlineAssistant?=null
     private val horde by lazy{HordeAssistant(status={message->if(state.value.answerEngine in setOf("auto","horde"))state.update{it.copy(onlineNotice=message)}})}
@@ -30,6 +26,7 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
     private var store=SavedStore(context,ownerId="legacy")
     private var conversations=ConversationStore(context,ownerId="legacy")
     @Volatile private var activeOwnerId="legacy"
+    @Volatile private var deletingAccountOwner:String?=null
     @Volatile private var rememberConversation=false
     private val cloudHistory by lazy{CloudHistorySync()}
     @Volatile private var cloudReadyOwner:String?=null
@@ -51,16 +48,9 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
     private val localModels=LocalSpeechModels(context)
     private var localModelsJob:Job?=null
     private var spanishChecked=false
-    private val modelLock=Mutex()
-    internal var local:OnlineAssistant=LocalAssistant(LocalTextTransport{prompt,instruction,tokens,onText->
-        modelLock.withLock{
-            currentCoroutineContext().ensureActive()
-            state.update{it.copy(status=if(it.languageReady)"Respondiendo con Qwen3 local…"else "Cargando Qwen3 local…")}
-            engines.loadLanguage(LocalAssistant.CONTEXT_TOKENS)
-            currentCoroutineContext().ensureActive()
-            state.update{it.copy(languageReady=true)}
-            engines.generate(prompt,tokens,instruction,onText)
-        }
+    // Qwen remains available to the debug metrics lab, not as a production answer engine.
+    internal var local:OnlineAssistant=LocalAssistant(LocalTextTransport{_,_,_,_->
+        throw IllegalStateException("Qwen3 está disponible solo en el laboratorio de pruebas.")
     })
 
     private val pool=AssistantPool()
@@ -117,7 +107,7 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
     }
     private fun model(engine:String,summary:Boolean):OnlineAssistant=when(engine){
         "horde"->remote?:horde
-        "qwen3"->if(summary&&local is LocalAssistant)localOrganizer else local
+        "qwen3"->if(BuildConfig.DEBUG){if(summary&&local is LocalAssistant)localOrganizer else local}else online
         else->online
     }
     private fun summaryKey(lines:List<SpeechLine>)=epoch.toString()+":"+lines.joinToString{it.id.toString()+":"+it.revision}
@@ -129,7 +119,8 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
     }
     private suspend fun runWork(work:Work){
         val attempted=mutableSetOf<String>();var received=false;var failure:Throwable?=null
-        val order=pool.order(work.summary,work.engine,state.value.localModelAvailable)
+        val order=if(BuildConfig.DEBUG&&work.engine==LocalAssistant.ID)listOf(LocalAssistant.ID)
+            else pool.order(work.summary,work.engine,state.value.localModelAvailable)
         try{
             while(valid(work)&&attempted.size<order.size){
                 finish(work,"En espera de un motor disponible…")
@@ -305,19 +296,15 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
     fun setAnswers(value:Boolean){preferences.edit().putBoolean("answers",value).apply();state.update{it.copy(autoAnswers=value)};if(!value){running.values.filter{(w,_)->!w.summary&&w.source!=null}.forEach{it.second.cancel()};signatures.clear()}else reconcileQuestions()}
     fun setAnswerEngine(value:String){
         synchronized(generationLock){
-        require(value in setOf("pollinations",LocalAssistant.ID,"horde","auto"))
+        require(value in setOf("pollinations","horde","auto")||(BuildConfig.DEBUG&&value==LocalAssistant.ID))
         if(state.value.answerEngine==value)return
         preferences.edit().putString("answer-engine",value).apply()
-        state.update{it.copy(answerEngine=value,languageReady=false,summaryError="",onlineNotice="",status=when(value){"horde","auto"->"Motores automáticos: AI Horde, Pollinations y Qwen local.";LocalAssistant.ID->"Qwen local seleccionado.";else->"Pollinations seleccionado."})}
+        state.update{it.copy(answerEngine=value,languageReady=false,summaryError="",onlineNotice="",status=when(value){"horde","auto"->"Motores online listos.";LocalAssistant.ID->"Qwen está disponible solo en el laboratorio de pruebas.";else->"Pollinations seleccionado."})}
         }
-        if(value=="pollinations")viewModelScope.launch(Dispatchers.IO){modelLock.withLock{if(state.value.answerEngine=="pollinations")engines.unloadLanguage()}}
-        refreshModels()
     }
     fun setOnlineAnswers(value:Boolean){
         stopResponse();warming?.cancel();preferences.edit().putBoolean("online-answers",value).apply()
         state.update{it.copy(onlineAnswers=value,languageReady=false,summaryError="",status=if(value)"Asistente activado."else "Respuestas del asistente desactivadas.")}
-        if(!value)viewModelScope.launch(Dispatchers.IO){modelLock.withLock{if(!state.value.onlineAnswers)engines.unloadLanguage()}}
-        refreshModels()
     }
     fun setSummary(value:Boolean){preferences.edit().putBoolean("summary",false).apply();state.update{it.copy(autoSummary=false)}}
     fun setLabels(value:Boolean){preferences.edit().putBoolean("labels",value).apply();state.update{it.copy(voiceLabels=value)}}
@@ -332,6 +319,17 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
         }else enqueue(null,0,question.trim().take(600))
     }
     fun requestSummary(){requestClassAnalysis(force=true)}
+    fun summaryBlocker():String?{
+        val current=state.value
+        if(summaryQueued)return "Ya se está preparando un resumen."
+        if(!current.onlineAnswers)return "Activa el asistente en Ajustes para generar el resumen."
+        if(!foreground)return "Vuelve a abrir la conversación para generar el resumen."
+        if(current.preparing)return "Espera a que termine de prepararse el motor."
+        val block=current.lines.filter{it.final||it.edited}.filter{it.text.isNotBlank()}
+        if(!SummaryReadiness.hasEnoughText(block.joinToString(" "){it.text}))return "Añade al menos 30 palabras sobre el tema para generar el resumen."
+        if(completedSummary==summaryKey(block))return "El resumen ya incluye este texto. Añade información antes de generar otro."
+        return null
+    }
     fun researchSummary(){
         val current=state.value
         if(!foreground||!current.onlineAnswers||current.preparing||summaryQueued)return
@@ -350,7 +348,7 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
     }
     fun stopResponse(){
         responseToken++
-        synchronized(generationLock){runCatching{engines.cancel()};generation?.cancel()}
+        synchronized(generationLock){generation?.cancel()}
         while(true){val w=queue.tryReceive().getOrNull()?:break;finish(w,"Respuesta detenida")}
         while(summaries.tryReceive().isSuccess){}
         summaryOwner?.let{pool.releaseReservation(it)}
@@ -376,7 +374,7 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
 
     private fun persistConversation(){synchronized(historyLock){if(!rememberConversation)return;state.update{it.copy(automaticTitle=ConversationNaming.automatic(it))};conversations.save(sessionId,state.value);state.update{it.copy(history=conversations.list())};queueCloudSave(sessionId)}}
     private fun beginCloudSync(uid:String){
-        if(uid=="legacy")return
+        if(uid=="legacy"||deletingAccountOwner==uid)return
         cloudReadyOwner=null
         state.update{it.copy(cloudStatus="Conectando al historial en la nube…")}
         cloudMergeJob?.cancel()
@@ -388,7 +386,7 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
             val hadCurrentRecord=target.load(currentId)!=null
             try{
                 cloudHistory.merge(uid,target,savedTarget)
-                if(activeOwnerId!=uid)return@launch
+                if(activeOwnerId!=uid||deletingAccountOwner==uid)return@launch
                 cloudReadyOwner=uid
                 lastCloudSyncAt=SystemClock.elapsedRealtime()
                 val restored=target.load(currentId)
@@ -403,7 +401,7 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
                 }
                 flushCloudChanges(uid)
             }catch(error:CancellationException){throw error}
-            catch(_:Throwable){if(activeOwnerId==uid)state.update{it.copy(cloudStatus="Pendiente: crea Cloud Firestore y publica las reglas de acceso.")}}
+            catch(_:Throwable){if(activeOwnerId==uid&&deletingAccountOwner!=uid)state.update{it.copy(cloudStatus="Pendiente: crea Cloud Firestore y publica las reglas de acceso.")}}
         }
     }
     private fun queueCloudSave(id:Long){if(activeOwnerId=="legacy")return;pendingCloudChanges[id]=false;flushCloudChanges(activeOwnerId)}
@@ -418,6 +416,7 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
                 delay(8000)
                 val operations=pendingCloudChanges.entries.associate{it.key to it.value}
                 for((id,deleted) in operations){
+                    if(activeOwnerId!=uid||cloudReadyOwner!=uid)return@launch
                     if(!pendingCloudChanges.remove(id,deleted))continue
                     try{
                         val target=synchronized(historyLock){if(activeOwnerId==uid)conversations else null}?:return@launch
@@ -429,6 +428,7 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
                 }
                 val savedOperations=pendingSavedChanges.entries.associate{it.key to it.value}
                 for((id,deleted) in savedOperations){
+                    if(activeOwnerId!=uid||cloudReadyOwner!=uid)return@launch
                     if(!pendingSavedChanges.remove(id,deleted))continue
                     try{
                         val target=synchronized(historyLock){if(activeOwnerId==uid)store else null}?:return@launch
@@ -501,6 +501,52 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
             conversations=ConversationStore(context,ownerId="legacy")
             store=SavedStore(context,ownerId="legacy")
             state.update{it.copy(folderId=null,folders=emptyList(),legacyDataAvailable=false,organization=ClassOrganization(),conversationTitle="",automaticTitle="",conversationKey=0,history=emptyList(),lines=emptyList(),answers=emptyList(),summary="",summaryError="",highlights=emptyList(),saved=emptyList(),listening=false,starting=false,generating=false,summaryPending=false,analysisRunning=false,status="Sesión cerrada.")}
+        }
+    }
+
+    /** Stops cloud writes and permanently removes this account's Firestore records before Auth deletion. */
+    suspend fun deleteCloudAccountData(uid:String){
+        synchronized(historyLock){
+            check(uid.isNotBlank()&&activeOwnerId==uid){"La cuenta activa cambió. Vuelve a iniciar sesión e inténtalo de nuevo."}
+            deletingAccountOwner=uid
+            rememberConversation=false
+            cloudReadyOwner=null
+            pendingCloudChanges.clear()
+            pendingSavedChanges.clear()
+        }
+        suspendSession()
+        cloudMergeJob?.join()
+        cloudWriteJob?.join()
+        try{withContext(Dispatchers.IO){cloudHistory.deleteAccountData(uid)}}
+        catch(error:Throwable){
+            if(activeOwnerId==uid){deletingAccountOwner=null;beginCloudSync(uid)}
+            throw error
+        }
+    }
+
+    fun resumeCloudAfterDeletionFailure(uid:String){
+        if(activeOwnerId!=uid)return
+        deletingAccountOwner=null
+        beginCloudSync(uid)
+    }
+
+    /** Removes the deleted account's local transcript/history while preserving unassigned legacy data. */
+    fun purgeDeletedAccountData(uid:String){
+        if(activeOwnerId!=uid)return
+        suspendSession()
+        synchronized(historyLock){
+            if(activeOwnerId!=uid)return
+            rememberConversation=false
+            deletingAccountOwner=null
+            conversations.deleteOwnedData()
+            store.deleteOwnedData()
+            preferences.edit().remove("legacy-import-dismissed:$uid").apply()
+            conversations.close()
+            store.close()
+            activeOwnerId="legacy"
+            conversations=ConversationStore(context,ownerId="legacy")
+            store=SavedStore(context,ownerId="legacy")
+            state.update{it.copy(folderId=null,folders=emptyList(),legacyDataAvailable=conversations.hasLegacyData()||store.hasLegacyData(),organization=ClassOrganization(),conversationTitle="",automaticTitle="",conversationKey=0,history=emptyList(),lines=emptyList(),answers=emptyList(),summary="",summaryError="",highlights=emptyList(),saved=emptyList(),listening=false,starting=false,generating=false,summaryPending=false,analysisRunning=false,status="Cuenta y datos eliminados.")}
         }
     }
     internal fun temporaryConversation(){synchronized(historyLock){rememberConversation=false};clearSession(keepHistory=true)}
@@ -706,12 +752,12 @@ class AssistantViewModel(app:Application):AndroidViewModel(app){
             catch(e:Throwable){state.update{it.copy(starting=false,listening=false,status="No se pudo preparar el reconocimiento local: ${e.message}")}}
         }
     }
-    private fun refreshModels(){val available=File(context.filesDir,"model.litertlm").exists();state.update{it.copy(localModelAvailable=available,models="Transcripción: Google local · Respuestas: ${if(!it.onlineAnswers)"desactivadas"else if(it.answerEngine!="pollinations"){if(available)"Qwen local · listo"else "importar Qwen3 .litertlm"}else "online · Pollinations Classic"}")}}
+    private fun refreshModels(){state.update{it.copy(localModelAvailable=false,models="Transcripción local de Google · respuestas online")}}
     private fun reloadSaved(){state.update{it.copy(saved=store.list())}}
     fun save(id:Long?,kind:String,text:String,scope:String,due:String)=saveWithSource(id,kind,text,scope,due,"Texto escrito por usuario")
     fun saveWithSource(id:Long?,kind:String,text:String,scope:String,due:String,source:String){val cloudId=store.saveWithSource(id,kind,text,scope,due,source);reloadSaved();queueSavedCloudSave(cloudId)}
     fun delete(id:Long){val cloudId=store.cloudId(id);store.delete(id);reloadSaved();cloudId?.let(::queueSavedCloudDelete)}
     fun done(id:Long,value:Boolean){val cloudId=store.cloudId(id);store.done(id,value);reloadSaved();cloudId?.let(::queueSavedCloudSave)}
-    fun releaseModels(after:()->Unit){suspendSession();viewModelScope.launch{capture?.join();generation?.join();withContext(Dispatchers.IO){modelLock.withLock{engines.close();state.update{it.copy(languageReady=false)}}};after()}}
-    override fun onCleared(){localModelsJob?.cancel();suspendSession();queue.close();summaries.close();val c=capture;val g=generation;CoroutineScope(Dispatchers.IO).launch{c?.join();g?.join();modelLock.withLock{engines.close()};store.close();synchronized(historyLock){conversations.close()}};super.onCleared()}
+    fun releaseModels(after:()->Unit){suspendSession();viewModelScope.launch{capture?.join();generation?.join();after()}}
+    override fun onCleared(){localModelsJob?.cancel();suspendSession();queue.close();summaries.close();val c=capture;val g=generation;CoroutineScope(Dispatchers.IO).launch{c?.join();g?.join();store.close();synchronized(historyLock){conversations.close()}};super.onCleared()}
 }

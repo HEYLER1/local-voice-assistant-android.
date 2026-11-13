@@ -1,0 +1,82 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function owns(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    function validConversation() {
+      let d = request.resource.data;
+      return d.keys().hasOnly([
+          'schema', 'title', 'updated', 'fragments', 'questions',
+          'folderName', 'chunkCount', 'chunkHashes', 'deleted'
+        ])
+        && d.keys().hasAll(['schema', 'updated', 'chunkCount', 'chunkHashes', 'deleted'])
+        && d.schema is int && d.schema == 1
+        && d.updated is int && d.updated > 0
+        && d.deleted is bool
+        && d.chunkCount is int && d.chunkCount >= 0 && d.chunkCount <= 10000
+        && d.chunkHashes is list && d.chunkHashes.size() == d.chunkCount
+        && (d.deleted
+          ? d.chunkCount == 0
+            && d.keys().hasOnly(['schema', 'updated', 'deleted', 'chunkCount', 'chunkHashes'])
+          : d.keys().hasAll(['title', 'fragments', 'questions'])
+            && d.title is string && d.title.size() <= 160
+            && d.fragments is int && d.fragments >= 0 && d.fragments <= 200000
+            && d.questions is int && d.questions >= 0 && d.questions <= 100000
+            && (!('folderName' in d) || d.folderName == null
+              || (d.folderName is string && d.folderName.size() <= 80)));
+    }
+
+    function validSavedItem() {
+      let d = request.resource.data;
+      return d.keys().hasOnly([
+          'schema', 'kind', 'text', 'scope', 'due', 'done',
+          'created', 'source', 'updated', 'deleted'
+        ])
+        && d.keys().hasAll(['schema', 'updated', 'deleted'])
+        && d.schema is int && d.schema == 1
+        && d.updated is int && d.updated > 0
+        && d.deleted is bool
+        && (d.deleted
+          ? d.keys().hasOnly(['schema', 'updated', 'deleted'])
+          : d.keys().hasAll([
+              'kind', 'text', 'scope', 'due', 'done', 'created', 'source'
+            ])
+            && d.kind is string && d.kind.size() <= 60
+            && d.text is string && d.text.size() > 0 && d.text.size() <= 120000
+            && d.scope is string && d.scope.size() <= 500
+            && d.due is string && d.due.size() <= 200
+            && d.done is bool
+            && d.created is int && d.created > 0
+            && d.source is string && d.source.size() <= 300);
+    }
+
+    match /users/{uid}/conversations/{conversationId} {
+      allow read: if owns(uid);
+      allow create, update: if owns(uid) && validConversation();
+      allow delete: if owns(uid);
+
+      match /chunks/{chunkId} {
+        allow read: if owns(uid);
+        allow create, update: if owns(uid)
+          && chunkId.matches('^[0-9]{5}$')
+          && request.resource.data.keys().hasOnly(['index', 'payload'])
+          && request.resource.data.keys().hasAll(['index', 'payload'])
+          && request.resource.data.index is int
+          && request.resource.data.index >= 0
+          && request.resource.data.index < 10000
+          && request.resource.data.payload is string
+          && request.resource.data.payload.size() > 0
+          && request.resource.data.payload.size() <= 700000;
+        allow delete: if owns(uid);
+      }
+    }
+
+    match /users/{uid}/savedItems/{itemId} {
+      allow read: if owns(uid);
+      allow create, update: if owns(uid) && validSavedItem();
+      allow delete: if owns(uid);
+    }
+  }
+}

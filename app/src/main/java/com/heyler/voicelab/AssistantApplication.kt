@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModelStoreOwner
 /** One conversation session shared by the activity and the recording service. No activity references. */
 class AssistantApplication:Application(),ViewModelStoreOwner {
     override val viewModelStore=ViewModelStore()
+    internal val adMob:AdMobIntegration by lazy { AdMobIntegration(this) }
     val assistant:AssistantViewModel by lazy {
         ViewModelProvider(this,ViewModelProvider.AndroidViewModelFactory.getInstance(this))[AssistantViewModel::class.java]
     }
